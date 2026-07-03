@@ -47,6 +47,56 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+func TestLoadProxyModes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gw.toml")
+	toml := `domain = "demo.localhost"
+
+[services.web]
+cmd = "pnpm dev"
+
+[services.data]
+cmd = "orlop-server"
+proxy = "passthrough"
+
+[services.worker]
+cmd = "worker"
+proxy = "none"
+`
+	if err := os.WriteFile(path, []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := []string{cfg.Services[0].Proxy, cfg.Services[1].Proxy, cfg.Services[2].Proxy}
+	want := []string{"", ProxyPassthrough, ProxyNone} // "" is the canonical default (http)
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("service %d proxy = %q, want %q", i, got[i], want[i])
+		}
+	}
+	// `proxy` is a reserved key, not per-service env.
+	for i, svc := range cfg.Services {
+		if _, leaked := svc.Env["proxy"]; leaked {
+			t.Errorf("service %d: proxy leaked into Env", i)
+		}
+	}
+}
+
+func TestLoadRejectsBadProxyMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gw.toml")
+	toml := "domain = \"demo.localhost\"\n\n[services.web]\ncmd = \"pnpm dev\"\nproxy = \"tcp\"\n"
+	if err := os.WriteFile(path, []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("want error for proxy = \"tcp\", got nil")
+	}
+}
+
 func TestRender(t *testing.T) {
 	got := Render("db_{branch_snake} at {slug} from {branch}", "feature/auth", "feature-auth")
 	want := "db_feature_auth at feature-auth from feature/auth"

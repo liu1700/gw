@@ -165,13 +165,15 @@ cookies/localStorage, separate databases if you configured hooks (below).
 | `GW_URL` | `https://web.feature-auth.myapp.localhost` | the service's own URL |
 | `GW_URL_<SERVICE>` | `GW_URL_API=https://api.feature-auth…` | calling sibling services |
 | `NEXT_PUBLIC_GW_URL_<SERVICE>`, `VITE_GW_URL_<SERVICE>` | same value | browser-side code (Next.js / Vite) |
+| `GW_PORT_<SERVICE>` | `GW_PORT_WORKER=21387` | direct 127.0.0.1 access (`proxy = "none"` services) |
 | `GW_BRANCH`, `GW_SLUG` | `feature/auth`, `feature-auth` | naming, logging |
 | `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE` | `~/.gw/ca.pem` | server-to-server HTTPS trusts the local CA |
 
-Databases and other raw-TCP services can't be routed by hostname (the
-protocol carries no name), so gw isolates them by *name* instead: one
-shared Postgres, one database per branch, templated into `DATABASE_URL`
-and managed by setup/teardown hooks.
+Plaintext TCP (Postgres, Redis) carries no hostname, so gw isolates those
+by *name* instead: one shared Postgres, one database per branch, templated
+into `DATABASE_URL` and managed by setup/teardown hooks. TLS-speaking
+services *do* carry a name (SNI) — route those with
+[`proxy = "passthrough"`](#non-http-services-mtls-grpc-raw-tcp).
 
 ## gw.toml
 
@@ -198,7 +200,39 @@ teardown = "dropdb myapp_{branch_snake}"
 
 Templates: `{branch}` (raw name), `{slug}` (DNS-safe: `feature-auth`),
 `{branch_snake}` (`feature_auth`, for database names). `hooks.setup` runs
-once per branch; `gw clean` runs teardown (drop the branch database, etc.).
+once per branch **before services start** — bootstrap work (create the
+database, run migrations, mint your app's certificates) goes here;
+`gw clean` runs teardown (drop the branch database, etc.).
+
+## Non-HTTP services (mTLS, gRPC, raw TCP)
+
+The default mode terminates TLS at the gateway and reverse-proxies HTTP.
+That's fatal for a server that authenticates the *client's* certificate —
+termination strips it. Two per-service opt-outs fix that:
+
+```toml
+[services.dataplane]
+cmd = "orlop-server --listen 127.0.0.1:$PORT"
+proxy = "passthrough"   # SNI-routed raw TCP splice: gw never terminates TLS,
+                        # so mutual TLS works end to end through the gateway
+
+[services.worker]
+cmd = "worker --listen 127.0.0.1:$PORT"
+proxy = "none"          # no routing at all: gw supervises the process and
+                        # isolates its port; reach it at 127.0.0.1:$GW_PORT_WORKER
+```
+
+Both are supervised like any other service (`gw up -d` / `gw down` /
+`gw logs`, branch-hashed ports), they just aren't HTTP-proxied. A
+`passthrough` service presents its **own** certificate — make it valid for
+the service's gw hostname (mint it in `hooks.setup`, which runs before
+services start; the hook sees `GW_URL_*`/`GW_SLUG`). Clients that dial the
+hostname get SNI for free, and their client certificates arrive at your
+server untouched.
+
+This is what lets gw host per-branch e2e environments for mTLS storage
+servers, gRPC-over-TLS backends, or anything that needs a cert/seed
+bootstrap before boot — not just web + HTTP-API stacks.
 
 ## Commands
 
@@ -234,6 +268,13 @@ OAuth callbacks, secure cookies, domain-pinned frontends):
   then `gw logs` if it 502s again.
 - `508 loop detected` → the app is proxying to its own public hostname;
   point it at the sibling's `GW_URL_*` instead.
+- `421 misdirected request` → that hostname is a `proxy = "none"` service
+  (connect to `127.0.0.1:$GW_PORT_<SERVICE>` instead), or a `passthrough`
+  service reached without SNI.
+- TLS/certificate error on a `passthrough` URL → that's your app's own cert,
+  not gw's: connections are spliced straight through. Make the service
+  present a cert valid for its gw hostname (mint it in `hooks.setup`), and
+  point clients at the app's CA.
 - Certificate warning → `gw trust` hasn't been run yet. Firefox keeps its
   own store — import `~/.gw/ca.pem` in Settings → Certificates if needed.
 - Proxy on `:8443` instead of `:443` (Linux) →
@@ -277,7 +318,8 @@ branch-scoped set of addresses — and make those addresses work over HTTPS.
 ## Status
 
 Early (v0.2.x). Works today: init/trust/up (-d)/down/logs/list/proxy/
-doctor/clean, detached services with stale-route pruning, prebuilt binaries
+doctor/clean, detached services with stale-route pruning, TLS-passthrough
+and unproxied service modes (mTLS/gRPC/raw TCP), prebuilt binaries
 for macOS/Linux, the Claude Code plugin. Roadmap: start the proxy at login
 (launchd/systemd units), full TOML via BurntSushi/toml, truststore via
 smallstep/truststore, `gw wt <branch>` one-shot worktree bootstrap,

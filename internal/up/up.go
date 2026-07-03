@@ -46,8 +46,11 @@ func Run(cfg *config.Config, info branchinfo.Info) error {
 		host := cfg.HostFor(svc.Name, info.Slug, info.IsMain)
 		plan = append(plan, planned{svc, port, host})
 		upper := strings.ToUpper(svc.Name)
-		shared["GW_URL_"+upper] = scheme + "://" + host
 		shared["GW_PORT_"+upper] = fmt.Sprint(port)
+		if svc.Proxy == config.ProxyNone {
+			continue // not routed — a GW_URL_* would point nowhere
+		}
+		shared["GW_URL_"+upper] = scheme + "://" + host
 		// Framework conventions for exposing env to browser bundles.
 		shared["NEXT_PUBLIC_GW_URL_"+upper] = scheme + "://" + host
 		shared["VITE_GW_URL_"+upper] = scheme + "://" + host
@@ -74,8 +77,10 @@ func Run(cfg *config.Config, info branchinfo.Info) error {
 		env = append(env,
 			"PORT="+fmt.Sprint(p.port),
 			"HOST=127.0.0.1",
-			"GW_URL="+scheme+"://"+p.host,
 		)
+		if p.svc.Proxy != config.ProxyNone {
+			env = append(env, "GW_URL="+scheme+"://"+p.host)
+		}
 		for k, v := range p.svc.Env {
 			env = append(env, k+"="+config.Render(v, info.Branch, info.Slug))
 		}
@@ -96,8 +101,9 @@ func Run(cfg *config.Config, info branchinfo.Info) error {
 		registry.Register(registry.Route{
 			Host: p.host, Port: p.port, PID: self,
 			Branch: info.Branch, Service: p.svc.Name,
+			Mode: p.svc.Proxy,
 		})
-		fmt.Printf("  %-8s → %s://%s  (:%d)\n", p.svc.Name, scheme, p.host, p.port)
+		fmt.Println(serviceLine(p.svc.Name, p.host, p.port, p.svc.Proxy))
 
 		prefix := fmt.Sprintf("[%s] ", p.svc.Name)
 		wg.Add(2)
@@ -126,14 +132,31 @@ func expandPort(cmd string, port int) string {
 	return strings.ReplaceAll(cmd, "$PORT", fmt.Sprint(port))
 }
 
+// serviceLine renders one service's address line for up/status output.
+func serviceLine(name, host string, port int, mode string) string {
+	switch mode {
+	case config.ProxyPassthrough:
+		return fmt.Sprintf("  %-8s → https://%s  (:%d, %s)", name, host, port, config.ModeLabel(mode))
+	case config.ProxyNone:
+		return fmt.Sprintf("  %-8s → 127.0.0.1:%d  (%s)", name, port, config.ModeLabel(mode))
+	default:
+		return fmt.Sprintf("  %-8s → https://%s  (:%d)", name, host, port)
+	}
+}
+
 func runHook(cfg *config.Config, info branchinfo.Info, shared map[string]string, name string) error {
 	h, ok := cfg.Hooks[name]
 	if !ok || h == "" {
 		return nil
 	}
-	// Idempotence marker: hooks.setup runs once per branch.
-	marker := filepath.Join(stateDir(), "hooks", info.Slug+"."+name)
+	// Idempotence marker: hooks.setup runs once per branch. Scoped by domain
+	// so equally-named branches in different projects don't share a marker.
+	marker := filepath.Join(stateDir(), "hooks", ident(cfg, info)+"."+name)
+	legacy := filepath.Join(stateDir(), "hooks", info.Slug+".setup") // pre-scoping name
 	if name == "setup" {
+		if _, err := os.Stat(legacy); err == nil {
+			os.Rename(legacy, marker) // migrate so setup doesn't re-fire on upgrade
+		}
 		if _, err := os.Stat(marker); err == nil {
 			return nil
 		}
@@ -155,7 +178,8 @@ func runHook(cfg *config.Config, info branchinfo.Info, shared map[string]string,
 		os.WriteFile(marker, nil, 0o644)
 	}
 	if name == "teardown" {
-		os.Remove(filepath.Join(stateDir(), "hooks", info.Slug+".setup"))
+		os.Remove(filepath.Join(stateDir(), "hooks", ident(cfg, info)+".setup"))
+		os.Remove(legacy) // else the next setup would migrate it back and skip
 	}
 	return nil
 }

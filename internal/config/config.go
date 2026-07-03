@@ -13,11 +13,33 @@ import (
 	"strings"
 )
 
+// Proxy modes: how (and whether) the gateway fronts a service. The default
+// (TLS-terminating HTTPS → HTTP reverse proxy) is canonically "" in memory
+// and in the route registry; ProxyHTTP is its gw.toml spelling.
+const (
+	ProxyHTTP        = "http"        // default: TLS-terminating HTTPS → HTTP reverse proxy
+	ProxyPassthrough = "passthrough" // SNI-routed TCP splice, TLS NOT terminated (mTLS survives)
+	ProxyNone        = "none"        // supervised process + isolated port only, no routing
+)
+
 type Service struct {
-	Name string
-	Cmd  string            // dev command, e.g. "pnpm dev"
-	Dir  string            // working dir relative to worktree root, default "."
-	Env  map[string]string // per-service extra env (templated)
+	Name  string
+	Cmd   string            // dev command, e.g. "pnpm dev"
+	Dir   string            // working dir relative to worktree root, default "."
+	Proxy string            // "" (http, default) | ProxyPassthrough | ProxyNone
+	Env   map[string]string // per-service extra env (templated)
+}
+
+// ModeLabel is the human-readable annotation for non-default proxy modes
+// ("" for plain http routing) — shared by every command that displays one.
+func ModeLabel(mode string) string {
+	switch mode {
+	case ProxyPassthrough:
+		return "TLS passthrough"
+	case ProxyNone:
+		return "not proxied"
+	}
+	return ""
 }
 
 type Config struct {
@@ -110,6 +132,16 @@ func Load(path string) (*Config, error) {
 				cur.Cmd = val
 			case "dir":
 				cur.Dir = val
+			case "proxy":
+				switch val {
+				case ProxyHTTP:
+					cur.Proxy = "" // canonical zero value for the default mode
+				case ProxyPassthrough, ProxyNone:
+					cur.Proxy = val
+				default:
+					return nil, fmt.Errorf("%s:%d: proxy = %q — must be %q, %q or %q",
+						path, line, val, ProxyHTTP, ProxyPassthrough, ProxyNone)
+				}
 			default:
 				cur.Env[key] = val
 			}
