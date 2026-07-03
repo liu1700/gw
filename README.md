@@ -3,6 +3,8 @@
 **Branch-aware local HTTPS gateway for git worktrees. For humans and AI
 agents.**
 
+**Your E2E vehicle**
+
 [![ci](https://github.com/liu1700/gw/actions/workflows/ci.yml/badge.svg)](https://github.com/liu1700/gw/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/liu1700/gw)](https://github.com/liu1700/gw/releases)
 [![License: MIT](https://img.shields.io/github/license/liu1700/gw)](LICENSE)
