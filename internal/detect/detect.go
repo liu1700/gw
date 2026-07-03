@@ -63,7 +63,12 @@ func scanDir(root, dir string) []Detected {
 				kind = "Vite"
 			}
 			if kind != "" && pkg.Scripts["dev"] != "" {
-				out = append(out, Detected{Name: "web", Kind: kind, Cmd: pm(abs) + " dev", Dir: dir})
+				cmd := pm(abs) + " dev"
+				if kind == "Vite" {
+					// Vite ignores the PORT env var; pass it as a flag.
+					cmd += " -- --port $PORT --host 127.0.0.1"
+				}
+				out = append(out, Detected{Name: "web", Kind: kind, Cmd: cmd, Dir: dir})
 			}
 		}
 	}

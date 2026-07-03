@@ -48,8 +48,9 @@ func Run(cfg *config.Config, info branchinfo.Info) error {
 		upper := strings.ToUpper(svc.Name)
 		shared["GW_URL_"+upper] = scheme + "://" + host
 		shared["GW_PORT_"+upper] = fmt.Sprint(port)
-		// Next.js convention: NEXT_PUBLIC_* is exposed to the browser bundle.
+		// Framework conventions for exposing env to browser bundles.
 		shared["NEXT_PUBLIC_GW_URL_"+upper] = scheme + "://" + host
+		shared["VITE_GW_URL_"+upper] = scheme + "://" + host
 	}
 	for k, v := range cfg.Env { // user-templated env (DATABASE_URL etc.)
 		shared[k] = config.Render(v, info.Branch, info.Slug)

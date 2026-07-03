@@ -66,6 +66,7 @@ and (if configured) per-branch database all happen automatically.
 | `GW_URL` | `https://web.feature-auth.myapp.localhost` | this service's own public URL |
 | `GW_URL_<SERVICE>` | `GW_URL_API=https://api.feature-auth...` | calling sibling services |
 | `NEXT_PUBLIC_GW_URL_<SERVICE>` | same value | browser-side code in Next.js |
+| `VITE_GW_URL_<SERVICE>` | same value | browser-side code in Vite |
 | `GW_BRANCH` / `GW_SLUG` | `feature/auth` / `feature-auth` | naming, logging |
 | `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE` | `~/.gw/ca.pem` | server-to-server HTTPS calls trust the local CA automatically |
 

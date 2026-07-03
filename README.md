@@ -128,7 +128,7 @@ cookies/localStorage, separate databases if you configured hooks (below).
 | `PORT`, `HOST` | `24094`, `127.0.0.1` | what your dev server binds |
 | `GW_URL` | `https://web.feature-auth.myapp.localhost` | the service's own URL |
 | `GW_URL_<SERVICE>` | `GW_URL_API=https://api.feature-auth…` | calling sibling services |
-| `NEXT_PUBLIC_GW_URL_<SERVICE>` | same value | browser-side code |
+| `NEXT_PUBLIC_GW_URL_<SERVICE>`, `VITE_GW_URL_<SERVICE>` | same value | browser-side code (Next.js / Vite) |
 | `GW_BRANCH`, `GW_SLUG` | `feature/auth`, `feature-auth` | naming, logging |
 | `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE` | `~/.gw/ca.pem` | server-to-server HTTPS trusts the local CA |
 
