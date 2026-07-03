@@ -36,6 +36,14 @@ When changing CLI commands, flags, or the injected env contract
 README in the same commit — the skill is documentation that agents execute,
 so drift breaks users. Validate with `claude plugin validate . --strict`.
 
+## Releases
+
+Push a `v*` tag → the release workflow runs goreleaser, building
+darwin/linux (amd64/arm64) binaries. `install.sh` depends on goreleaser's
+archive naming (`gw_<version>_<os>_<arch>.tar.gz`) — keep them in sync.
+User-facing install guidance is binary-first (install.sh), never
+`go install`-first: users may not have Go.
+
 ## Manual end-to-end check
 
 ```bash

@@ -6,9 +6,11 @@ Set up gw in the current repository so every git worktree can run its full
 frontend + backend stack simultaneously over trusted HTTPS, with zero port
 conflicts. Follow these steps in order:
 
-1. Check gw is installed (`gw version`). If not, install it with
-   `go install github.com/liu1700/gw/cmd/gw@latest` (requires Go 1.22+) and
-   verify `gw version` works before continuing.
+1. Check gw is installed (`gw version`). If not, install the prebuilt
+   binary (no Go required):
+   `curl -fsSL https://raw.githubusercontent.com/liu1700/gw/main/install.sh | sh`
+   and verify `gw version` works before continuing (it installs to
+   `~/.local/bin` — make sure that's in PATH).
 2. Run `gw init` from the repo root. Show the user the generated `gw.toml`
    and confirm the detected services and commands look right; edit the file
    if they correct anything.
@@ -26,3 +28,7 @@ conflicts. Follow these steps in order:
    session) and show the user their URLs. If a URL 502s, check `gw logs`.
 7. Suggest committing `gw.toml` so every teammate and every worktree shares
    the config.
+
+If gw itself fails at any step (not the user's app), offer to file a bug at
+https://github.com/liu1700/gw/issues with `gw version`, the OS, and the
+failing command's output.

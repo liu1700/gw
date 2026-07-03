@@ -26,6 +26,9 @@ import (
 
 const fallbackProxyPort = 8443
 
+// version is overridden at release time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -59,7 +62,7 @@ func main() {
 	case "clean":
 		err = cmdClean()
 	case "version":
-		fmt.Println("gw 0.2.0-dev")
+		fmt.Println("gw " + version)
 	default:
 		usage()
 		os.Exit(2)

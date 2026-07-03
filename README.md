@@ -91,8 +91,9 @@ Set up gw (https://github.com/liu1700/gw) in this repository so every git
 worktree runs its dev stack on branch-specific HTTPS URLs with no port
 conflicts:
 
-1. Install: go install github.com/liu1700/gw/cmd/gw@latest  (needs Go 1.22+;
-   verify with `gw version`).
+1. If `gw version` fails, install the prebuilt binary (no Go required):
+   curl -fsSL https://raw.githubusercontent.com/liu1700/gw/main/install.sh | sh
+   (installs to ~/.local/bin; make sure that's in PATH).
 2. Run `gw init` at the repo root. Review the generated gw.toml — it detects
    Next.js/Vite/Nuxt/FastAPI/Flask/Django and fills in dev commands.
 3. `gw init` lists hardcoded localhost:PORT references. Replace them with
@@ -107,16 +108,22 @@ conflicts:
 Rules from now on: in this repo, always start dev servers with `gw up -d`
 (stop with `gw down`, logs with `gw logs`), never directly; never hardcode
 localhost:PORT in code, tests, or docs — use the GW_URL_* env vars; run
-`gw doctor` first when a URL doesn't load.
+`gw doctor` first when a URL doesn't load. If gw itself misbehaves (not my
+app), offer to file an issue at https://github.com/liu1700/gw/issues with
+`gw version`, OS, and the `gw doctor` / `gw logs` output.
 ```
 
 ## Install
 
+Prebuilt binary (macOS / Linux, no Go required):
+
 ```bash
-go install github.com/liu1700/gw/cmd/gw@latest
+curl -fsSL https://raw.githubusercontent.com/liu1700/gw/main/install.sh | sh
 ```
 
-Prebuilt binaries and Homebrew are on the roadmap.
+Installs to `~/.local/bin` (override with `GW_INSTALL_DIR`). Or download an
+archive from the [releases page](https://github.com/liu1700/gw/releases).
+With Go 1.22+ you can also `go install github.com/liu1700/gw/cmd/gw@latest`.
 
 ## Quick start
 
@@ -241,8 +248,8 @@ security delete-certificate -c "gw local CA" ~/Library/Keychains/login.keychain-
 # Linux
 sudo rm /usr/local/share/ca-certificates/gw-local-ca.crt && sudo update-ca-certificates
 
-rm -rf ~/.gw                    # CA key, route table, hook markers
-rm $(which gw)                  # or: go clean -i github.com/liu1700/gw/cmd/gw
+rm -rf ~/.gw                    # CA key, route table, logs, pidfiles
+rm $(which gw)                  # typically ~/.local/bin/gw
 ```
 
 ## Comparison
@@ -267,12 +274,15 @@ branch-scoped set of addresses — and make those addresses work over HTTPS.
 
 ## Status
 
-Early (v0.2.0-dev). Works today: init/trust/up (-d)/down/logs/list/proxy/
-doctor/clean, detached services with stale-route pruning, the Claude Code
-plugin, macOS and Linux. Roadmap: start the proxy at login (launchd/
-systemd units), full TOML via BurntSushi/toml, truststore via
+Early (v0.2.x). Works today: init/trust/up (-d)/down/logs/list/proxy/
+doctor/clean, detached services with stale-route pruning, prebuilt binaries
+for macOS/Linux, the Claude Code plugin. Roadmap: start the proxy at login
+(launchd/systemd units), full TOML via BurntSushi/toml, truststore via
 smallstep/truststore, `gw wt <branch>` one-shot worktree bootstrap,
-Windows, prebuilt binaries + Homebrew tap.
+Windows, Homebrew tap.
+
+Found a bug? [Open an issue](https://github.com/liu1700/gw/issues) with
+`gw version`, your OS, and `gw doctor` / `gw logs` output.
 
 ## License
 

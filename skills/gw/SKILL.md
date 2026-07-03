@@ -125,6 +125,18 @@ shared server, per-branch logical isolation via templated names. HTTP
 services are routed by hostname; raw-TCP services can't be (no Host concept
 in the protocol), which is why databases isolate by name instead.
 
+## Installing gw
+
+If `gw` is not on PATH, install the prebuilt binary — do not assume Go is
+available:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/liu1700/gw/main/install.sh | sh
+```
+
+It installs to `~/.local/bin` (override with `GW_INSTALL_DIR`) and prints a
+PATH hint if needed. Verify with `gw version`.
+
 ## Troubleshooting
 
 - URL not loading → `gw doctor`, then `gw list` to confirm the route exists.
@@ -139,3 +151,14 @@ in the protocol), which is why databases isolate by name instead.
   :443 without root.
 - Real domain not resolving → needs a wildcard A record
   `*.dev.example.com → 127.0.0.1`, or local dnsmasq.
+
+## Reporting gw bugs
+
+If gw **itself** misbehaves — crashes, routes to the wrong branch/service,
+serves a bad certificate, leaves stale routes, `gw up -d` loses processes —
+as opposed to the user's app failing, tell the user and offer to file a bug
+at https://github.com/liu1700/gw/issues. With their consent, use
+`gh issue create --repo liu1700/gw` (or hand them the link) and include:
+`gw version`, OS and version, the exact command run, and the relevant
+`gw doctor` / `gw logs` output. Redact secrets (tokens, DATABASE_URL
+credentials) from anything you paste.
