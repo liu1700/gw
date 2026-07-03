@@ -66,15 +66,17 @@ func Down(cfg *config.Config, info branchinfo.Info) error {
 	return nil
 }
 
+// printHosts reports each service's address. Ports come from the registry —
+// the system of record once services run (re-deriving via PortFor here would
+// probe past the very port the running service occupies).
 func printHosts(cfg *config.Config, info branchinfo.Info) {
+	routes, _ := registry.Load()
 	for _, svc := range cfg.Services {
-		switch svc.Proxy {
-		case config.ProxyPassthrough:
-			fmt.Printf("  %-8s → https://%s  (TLS passthrough)\n", svc.Name, cfg.HostFor(svc.Name, info.Slug, info.IsMain))
-		case config.ProxyNone:
-			fmt.Printf("  %-8s → 127.0.0.1:%d  (not proxied)\n", svc.Name, branchinfo.PortFor(info.Branch, svc.Name))
-		default:
-			fmt.Printf("  %-8s → https://%s\n", svc.Name, cfg.HostFor(svc.Name, info.Slug, info.IsMain))
+		host := cfg.HostFor(svc.Name, info.Slug, info.IsMain)
+		if r, ok := routes[host]; ok {
+			fmt.Println(serviceLine(svc.Name, host, r.Port, r.Mode))
+		} else { // not registered (yet) — best-effort prediction
+			fmt.Println(serviceLine(svc.Name, host, branchinfo.PortFor(info.Branch, svc.Name), svc.Proxy))
 		}
 	}
 }

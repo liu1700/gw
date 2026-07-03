@@ -71,7 +71,7 @@ proxy = "none"
 		t.Fatal(err)
 	}
 	got := []string{cfg.Services[0].Proxy, cfg.Services[1].Proxy, cfg.Services[2].Proxy}
-	want := []string{ProxyHTTP, ProxyPassthrough, ProxyNone}
+	want := []string{"", ProxyPassthrough, ProxyNone} // "" is the canonical default (http)
 	for i := range want {
 		if got[i] != want[i] {
 			t.Errorf("service %d proxy = %q, want %q", i, got[i], want[i])

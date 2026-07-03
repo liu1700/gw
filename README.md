@@ -266,9 +266,13 @@ OAuth callbacks, secure cookies, domain-pinned frontends):
   then `gw logs` if it 502s again.
 - `508 loop detected` → the app is proxying to its own public hostname;
   point it at the sibling's `GW_URL_*` instead.
-- `421 misdirected request` → that hostname is a `proxy = "passthrough"` or
-  `"none"` service — it has no HTTP surface behind gw. Speak TLS to it
-  directly, or connect to `127.0.0.1:$GW_PORT_<SERVICE>`.
+- `421 misdirected request` → that hostname is a `proxy = "none"` service
+  (connect to `127.0.0.1:$GW_PORT_<SERVICE>` instead), or a `passthrough`
+  service reached without SNI.
+- TLS/certificate error on a `passthrough` URL → that's your app's own cert,
+  not gw's: connections are spliced straight through. Make the service
+  present a cert valid for its gw hostname (mint it in `hooks.setup`), and
+  point clients at the app's CA.
 - Certificate warning → `gw trust` hasn't been run yet. Firefox keeps its
   own store — import `~/.gw/ca.pem` in Settings → Certificates if needed.
 - Proxy on `:8443` instead of `:443` (Linux) →

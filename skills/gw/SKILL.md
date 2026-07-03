@@ -171,9 +171,13 @@ PATH hint if needed. Verify with `gw version`.
   then `gw logs` if it 502s again (the service may have crashed on boot).
 - `508 loop detected` → the app is proxying to its own public hostname;
   point it at the sibling's `GW_URL_*` instead.
-- `421 misdirected request` → that hostname belongs to a `proxy = "passthrough"`
-  or `"none"` service: speak TLS to it directly (passthrough) or connect to
-  `127.0.0.1:$GW_PORT_<SERVICE>` (none) — it has no HTTP surface behind gw.
+- `421 misdirected request` → the hostname belongs to a `proxy = "none"`
+  service (connect to `127.0.0.1:$GW_PORT_<SERVICE>` instead), or to a
+  `passthrough` service reached without SNI.
+- TLS/cert error on a `passthrough` URL → that's the app's own certificate
+  (gw splices, it does not terminate): the service must present a cert valid
+  for its gw hostname — mint it in `hooks.setup` — and the client must trust
+  the app's CA, not gw's.
 - Cert warning in browser → `gw trust` hasn't been run (no sudo on macOS,
   sudo once on Linux; ask the user before running it).
 - `:443 permission denied` (Linux) → proxy fell back to `:8443`; grant with

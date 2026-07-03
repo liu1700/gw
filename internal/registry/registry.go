@@ -1,5 +1,8 @@
-// Package registry is the shared "hostname -> port" table between `gw up`
-// (writer) and the proxy daemon (reader). MVP transport: a JSON state file
+// Package registry is the shared table of supervised services between
+// `gw up` (writer) and the proxy daemon (reader): hostname -> port, plus a
+// Mode saying whether/how the proxy routes it — mode "none" entries are
+// deliberately registered although never routed, so `gw list` and the
+// proxy's error pages can point at them. MVP transport: a JSON state file
 // with mtime-based cache invalidation. Simple, crash-safe enough, and lets
 // `gw list` work without talking to the daemon. Swap for a unix socket API
 // if write volume ever matters (it won't for local dev).

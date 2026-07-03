@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -35,7 +36,7 @@ type Server struct {
 }
 
 func New() *Server {
-	return &Server{routes: registry.NewCached(), helloTimeout: 10 * time.Second}
+	return &Server{routes: registry.NewCached(), helloTimeout: 5 * time.Second}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -121,8 +122,19 @@ func Listen(fallbackPort int) error {
 func (s *Server) Serve(ln net.Listener, ca *certs.CA) error {
 	tlsCfg := &tls.Config{GetCertificate: ca.GetCertificate, NextProtos: []string{"h2", "http/1.1"}}
 	httpLn := &chanListener{ch: make(chan net.Conn), addr: ln.Addr()}
-	srv := &http.Server{Handler: s, TLSConfig: tlsCfg}
-	go srv.ServeTLS(httpLn, "", "")
+	srv := &http.Server{
+		Handler:           s,
+		TLSConfig:         tlsCfg,
+		ReadHeaderTimeout: 5 * time.Second, // stalled conns can't hold fds forever
+		IdleTimeout:       60 * time.Second,
+	}
+	go func() {
+		// Never returns in normal operation; if it does, dispatch would block
+		// forever handing conns to a dead server — die so the daemon restarts.
+		err := srv.ServeTLS(httpLn, "", "")
+		fmt.Fprintf(os.Stderr, "gw: internal https server exited: %v\n", err)
+		os.Exit(1)
+	}()
 
 	for {
 		c, err := ln.Accept()
@@ -140,17 +152,14 @@ func (s *Server) dispatch(c net.Conn, httpLn *chanListener) {
 		c.Close() // nothing sent within the deadline — don't hold the fd
 		return
 	}
-	if route, ok := s.routes.Lookup(strings.ToLower(sni)); ok && route.Mode == config.ProxyPassthrough {
-		if !registry.Alive(route) {
-			registry.Unregister(route.Host)
-			c.Close()
-			return
-		}
+	if route, ok := s.routes.Lookup(strings.ToLower(sni)); ok &&
+		route.Mode == config.ProxyPassthrough && registry.Alive(route) {
 		splice(c, prefix, route.Port)
 		return
 	}
-	// Everything else — http routes, unknown hosts, no SNI — is answered by
-	// the HTTP server so the user gets a diagnosable error page.
+	// Everything else — http routes, unknown hosts, no SNI, dead routes — is
+	// answered by the HTTP server, whose handler already prunes dead routes
+	// and serves a diagnosable error page.
 	httpLn.ch <- newPrefixConn(c, prefix)
 }
 
@@ -170,13 +179,15 @@ func splice(client net.Conn, prefix []byte, port int) {
 	go func() {
 		defer close(done)
 		io.Copy(up, client)
-		if t, ok := up.(*net.TCPConn); ok {
-			t.CloseWrite() // forward client's EOF
-		}
+		halfClose(up) // forward client's EOF
 	}()
 	io.Copy(client, up)
-	if t, ok := client.(*net.TCPConn); ok {
-		t.CloseWrite() // forward upstream's EOF
-	}
+	halfClose(client) // forward upstream's EOF
 	<-done
+}
+
+func halfClose(c net.Conn) {
+	if t, ok := c.(*net.TCPConn); ok {
+		t.CloseWrite()
+	}
 }

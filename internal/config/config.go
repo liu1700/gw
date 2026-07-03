@@ -13,7 +13,9 @@ import (
 	"strings"
 )
 
-// Proxy modes: how (and whether) the gateway fronts a service.
+// Proxy modes: how (and whether) the gateway fronts a service. The default
+// (TLS-terminating HTTPS → HTTP reverse proxy) is canonically "" in memory
+// and in the route registry; ProxyHTTP is its gw.toml spelling.
 const (
 	ProxyHTTP        = "http"        // default: TLS-terminating HTTPS → HTTP reverse proxy
 	ProxyPassthrough = "passthrough" // SNI-routed TCP splice, TLS NOT terminated (mTLS survives)
@@ -24,8 +26,20 @@ type Service struct {
 	Name  string
 	Cmd   string            // dev command, e.g. "pnpm dev"
 	Dir   string            // working dir relative to worktree root, default "."
-	Proxy string            // ProxyHTTP (default) | ProxyPassthrough | ProxyNone
+	Proxy string            // "" (http, default) | ProxyPassthrough | ProxyNone
 	Env   map[string]string // per-service extra env (templated)
+}
+
+// ModeLabel is the human-readable annotation for non-default proxy modes
+// ("" for plain http routing) — shared by every command that displays one.
+func ModeLabel(mode string) string {
+	switch mode {
+	case ProxyPassthrough:
+		return "TLS passthrough"
+	case ProxyNone:
+		return "not proxied"
+	}
+	return ""
 }
 
 type Config struct {
@@ -83,7 +97,7 @@ func Load(path string) (*Config, error) {
 			}
 			section = strings.Trim(raw, "[]")
 			if name, ok := strings.CutPrefix(section, "services."); ok {
-				cfg.Services = append(cfg.Services, Service{Name: name, Dir: ".", Proxy: ProxyHTTP, Env: map[string]string{}})
+				cfg.Services = append(cfg.Services, Service{Name: name, Dir: ".", Env: map[string]string{}})
 				cur = &cfg.Services[len(cfg.Services)-1]
 			} else {
 				cur = nil
@@ -120,7 +134,9 @@ func Load(path string) (*Config, error) {
 				cur.Dir = val
 			case "proxy":
 				switch val {
-				case ProxyHTTP, ProxyPassthrough, ProxyNone:
+				case ProxyHTTP:
+					cur.Proxy = "" // canonical zero value for the default mode
+				case ProxyPassthrough, ProxyNone:
 					cur.Proxy = val
 				default:
 					return nil, fmt.Errorf("%s:%d: proxy = %q — must be %q, %q or %q",

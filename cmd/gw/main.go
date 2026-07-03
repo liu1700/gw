@@ -201,14 +201,15 @@ func cmdList() error {
 		return nil
 	}
 	for _, r := range routes {
-		switch r.Mode {
-		case config.ProxyPassthrough:
-			fmt.Printf("  %-50s → :%-6d %s @ %s  [tls-passthrough]\n", "https://"+r.Host, r.Port, r.Service, r.Branch)
-		case config.ProxyNone:
-			fmt.Printf("  %-50s → :%-6d %s @ %s  [not proxied]\n", r.Host, r.Port, r.Service, r.Branch)
-		default:
-			fmt.Printf("  %-50s → :%-6d %s @ %s\n", "https://"+r.Host, r.Port, r.Service, r.Branch)
+		addr := "https://" + r.Host
+		if r.Mode == config.ProxyNone {
+			addr = r.Host // no https endpoint exists
 		}
+		tag := ""
+		if l := config.ModeLabel(r.Mode); l != "" {
+			tag = "  [" + l + "]"
+		}
+		fmt.Printf("  %-50s → :%-6d %s @ %s%s\n", addr, r.Port, r.Service, r.Branch, tag)
 	}
 	return nil
 }
