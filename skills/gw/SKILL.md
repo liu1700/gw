@@ -43,7 +43,7 @@ hardcode `localhost:PORT`** — use the injected env vars below.
 ```
 gw init      # detect stack (Next.js/Vite/FastAPI/Flask/Django), write gw.toml,
              # and list hardcoded localhost URLs that must be parameterized
-gw trust     # one-time: create local CA, install into system trust store (needs sudo)
+gw trust     # one-time: create local CA and trust it (no sudo on macOS; sudo on Linux)
 gw proxy &   # start the HTTPS gateway daemon (once per machine, :443 or :8443 fallback)
 gw up        # start ALL services for the current worktree's branch (foreground, Ctrl-C stops)
 gw list      # show active routes across all branches
@@ -120,7 +120,8 @@ in the protocol), which is why databases isolate by name instead.
 - `502 no route` → the service isn't running; `gw up` in that worktree.
 - `508 loop detected` → the app is proxying to its own public hostname;
   point it at the sibling's `GW_URL_*` instead.
-- Cert warning in browser → `gw trust` hasn't been run (needs sudo once).
+- Cert warning in browser → `gw trust` hasn't been run (no sudo on macOS,
+  sudo once on Linux; ask the user before running it).
 - `:443 permission denied` (Linux) → proxy fell back to `:8443`; grant with
   `sudo setcap cap_net_bind_service=+ep $(which gw)`. macOS 10.14+ binds
   :443 without root.

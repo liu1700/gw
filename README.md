@@ -72,8 +72,8 @@ conflicts:
 3. `gw init` lists hardcoded localhost:PORT references. Replace them with
    the injected env vars: frontend uses NEXT_PUBLIC_GW_URL_API (or
    GW_URL_API server-side); backend CORS allows os.environ["GW_URL_WEB"].
-4. Ask me before running `gw trust` (it installs a local CA into the system
-   trust store and prompts for sudo once).
+4. Run `gw trust` to trust the local CA — on macOS it uses my login keychain
+   (no sudo); on Linux it needs sudo once. Ask me before running it.
 5. Start the proxy (`gw proxy &`), then `gw up`, and report my URLs.
 6. Commit gw.toml so every worktree and teammate shares it.
 
@@ -95,7 +95,7 @@ Prebuilt binaries and Homebrew are on the roadmap.
 ```bash
 cd your-repo
 gw init        # detect stack, write gw.toml, flag hardcoded localhost URLs
-gw trust       # one-time: local CA into the system trust store (sudo once)
+gw trust       # one-time: trust the local CA (no sudo on macOS; sudo once on Linux)
 gw proxy &     # one gateway daemon per machine
 gw up          # start everything → prints your URLs
 ```
@@ -194,7 +194,8 @@ OAuth callbacks, secure cookies, domain-pinned frontends):
 - `502 no route` → the service isn't running; `gw up` in that worktree.
 - `508 loop detected` → the app is proxying to its own public hostname;
   point it at the sibling's `GW_URL_*` instead.
-- Certificate warning → `gw trust` hasn't been run yet.
+- Certificate warning → `gw trust` hasn't been run yet. Firefox keeps its
+  own store — import `~/.gw/ca.pem` in Settings → Certificates if needed.
 - Proxy on `:8443` instead of `:443` (Linux) →
   `sudo setcap cap_net_bind_service=+ep $(which gw)`. macOS binds `:443`
   without root.
@@ -204,8 +205,8 @@ OAuth callbacks, secure cookies, domain-pinned frontends):
 gw touches your system trust store, so removal is documented:
 
 ```bash
-# macOS
-sudo security delete-certificate -c "gw local CA" /Library/Keychains/System.keychain
+# macOS (login keychain; add sudo + System.keychain if you used the fallback)
+security delete-certificate -c "gw local CA" ~/Library/Keychains/login.keychain-db
 # Linux
 sudo rm /usr/local/share/ca-certificates/gw-local-ca.crt && sudo update-ca-certificates
 

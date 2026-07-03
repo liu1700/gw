@@ -158,7 +158,7 @@ func (c *CA) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error
 // CACertPath returns the PEM path, for NODE_EXTRA_CA_CERTS / REQUESTS_CA_BUNDLE injection.
 func CACertPath() string { p, _ := caPaths(); return p }
 
-// Trust installs the CA into the system trust store. Best-effort per platform;
+// Trust installs the CA into the trust store. Best-effort per platform;
 // prints manual instructions on failure. (Swap for smallstep/truststore later.)
 func Trust() error {
 	if _, err := LoadOrCreate(); err != nil {
@@ -167,6 +167,14 @@ func Trust() error {
 	certPath, _ := caPaths()
 	switch runtime.GOOS {
 	case "darwin":
+		// User trust domain is enough for browsers and needs no sudo.
+		home, _ := os.UserHomeDir()
+		login := filepath.Join(home, "Library", "Keychains", "login.keychain-db")
+		if err := run("security", "add-trusted-cert", "-r", "trustRoot", "-k", login, certPath); err == nil {
+			fmt.Println("gw: CA trusted for your user (login keychain, no sudo needed)")
+			return nil
+		}
+		fmt.Println("gw: login keychain failed, trying system keychain (needs sudo)")
 		return run("sudo", "security", "add-trusted-cert", "-d",
 			"-k", "/Library/Keychains/System.keychain", certPath)
 	case "linux":
