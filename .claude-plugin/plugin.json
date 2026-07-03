@@ -1,0 +1,13 @@
+{
+  "name": "gw",
+  "version": "0.1.0",
+  "description": "Branch-aware local HTTPS gateway: every git worktree gets trusted HTTPS URLs derived from its branch name. Skill + worktree hooks + /gw:setup command.",
+  "author": {
+    "name": "Yuchen Liu",
+    "url": "https://github.com/liu1700"
+  },
+  "homepage": "https://github.com/liu1700/gw",
+  "repository": "https://github.com/liu1700/gw",
+  "license": "MIT",
+  "keywords": ["worktree", "https", "port-conflict", "parallel-agents", "dev-server", "reverse-proxy"]
+}

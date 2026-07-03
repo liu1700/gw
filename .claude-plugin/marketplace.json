@@ -1,0 +1,17 @@
+{
+  "name": "gw-marketplace",
+  "owner": {
+    "name": "Yuchen Liu",
+    "url": "https://github.com/liu1700"
+  },
+  "description": "Marketplace for gw, the branch-aware local HTTPS gateway. Run frontend + backend in every git worktree simultaneously with zero port conflicts and trusted HTTPS.",
+  "plugins": [
+    {
+      "name": "gw",
+      "source": ".",
+      "description": "Branch-aware local HTTPS gateway: every git worktree gets trusted HTTPS URLs derived from its branch name.",
+      "category": "development",
+      "tags": ["worktree", "https", "port-conflict", "parallel-agents"]
+    }
+  ]
+}
