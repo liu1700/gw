@@ -32,9 +32,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	host = strings.ToLower(host)
 
 	route, ok := s.routes.Lookup(host)
+	if ok && !registry.Alive(route) {
+		// The process that registered this route died without cleanup.
+		registry.Unregister(host)
+		ok = false
+	}
 	if !ok {
 		http.Error(w, fmt.Sprintf(
-			"gw: no route for %q\nIs the service running? Try `gw up` in the worktree, or `gw list`.",
+			"gw: no route for %q\nIs the service running? Try `gw up -d` in the worktree, or `gw list`.",
 			host), http.StatusBadGateway)
 		return
 	}

@@ -22,7 +22,7 @@ conflicts. Follow these steps in order:
 5. Run `gw trust` to trust the local CA (no sudo on macOS — it uses the
    login keychain; on Linux it prompts for sudo once). Tell the user before
    running it.
-6. Start the proxy if it isn't running (`gw doctor` will tell you), then run
-   `gw up` and show the user their URLs.
+6. Run `gw up -d` (it starts the proxy automatically and detaches from this
+   session) and show the user their URLs. If a URL 502s, check `gw logs`.
 7. Suggest committing `gw.toml` so every teammate and every worktree shares
    the config.

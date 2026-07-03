@@ -56,6 +56,32 @@ Non-interactive (scripts, dotfiles):
 claude plugin marketplace add liu1700/gw && claude plugin install gw@gw-marketplace
 ```
 
+### Day to day: "start the services"
+
+You're working in a worktree and tell Claude:
+
+> start the services for this worktree
+
+With the plugin installed, Claude runs `gw up -d` and replies with this
+branch's URLs:
+
+```
+gw: services for branch feature/auth up (detached, pid 47210)
+  web      → https://web.feature-auth.myapp.localhost
+  api      → https://api.feature-auth.myapp.localhost
+```
+
+Three properties make this safe to say from any worktree:
+
+- **Detached** — services keep running after the agent session (or your
+  terminal) exits; the proxy is started automatically if it isn't up.
+- **Scoped** — only this worktree's branch is affected. Other worktrees,
+  and whatever is running on your main checkout, are untouched.
+- **Idempotent** — asking twice just reprints the URLs.
+
+"stop the services" → `gw down` (again, only this worktree's).
+"show me the logs" → `gw logs`.
+
 ### Any other agent
 
 Copy this prompt to your agent (it's short — read it before pasting):
@@ -74,12 +100,14 @@ conflicts:
    GW_URL_API server-side); backend CORS allows os.environ["GW_URL_WEB"].
 4. Run `gw trust` to trust the local CA — on macOS it uses my login keychain
    (no sudo); on Linux it needs sudo once. Ask me before running it.
-5. Start the proxy (`gw proxy &`), then `gw up`, and report my URLs.
+5. Run `gw up -d` (it starts the proxy automatically, detaches from your
+   session, and prints the URLs) — then report my URLs.
 6. Commit gw.toml so every worktree and teammate shares it.
 
-Rules from now on: in this repo, always start dev servers with `gw up`,
-never directly; never hardcode localhost:PORT in code, tests, or docs — use
-the GW_URL_* env vars; run `gw doctor` first when a URL doesn't load.
+Rules from now on: in this repo, always start dev servers with `gw up -d`
+(stop with `gw down`, logs with `gw logs`), never directly; never hardcode
+localhost:PORT in code, tests, or docs — use the GW_URL_* env vars; run
+`gw doctor` first when a URL doesn't load.
 ```
 
 ## Install
@@ -96,15 +124,14 @@ Prebuilt binaries and Homebrew are on the roadmap.
 cd your-repo
 gw init        # detect stack, write gw.toml, flag hardcoded localhost URLs
 gw trust       # one-time: trust the local CA (no sudo on macOS; sudo once on Linux)
-gw proxy &     # one gateway daemon per machine
-gw up          # start everything → prints your URLs
+gw up -d       # start everything, proxy included → prints your URLs
 ```
 
 New worktree — no extra ceremony, `gw.toml` is already in git:
 
 ```bash
 git worktree add ../myapp-auth feature/auth
-cd ../myapp-auth && pnpm i && gw up
+cd ../myapp-auth && pnpm i && gw up -d
 #   web → https://web.feature-auth.myapp.localhost
 #   api → https://api.feature-auth.myapp.localhost
 ```
@@ -168,10 +195,13 @@ once per branch; `gw clean` runs teardown (drop the branch database, etc.).
 
 ```
 gw init      detect your stack, generate gw.toml, flag hardcoded URLs
-gw trust     create the local CA and install it into the system trust store
-gw proxy     run the HTTPS gateway (foreground; :443 with fallback :8443)
-gw up        start all services for the current worktree's branch
+gw trust     create the local CA and trust it (no sudo on macOS)
+gw up -d     start this worktree's services, detached; starts the proxy if
+             needed; idempotent (omit -d to run in the foreground)
+gw down      stop this worktree's detached services
+gw logs      show logs from this worktree's detached services
 gw list      show active routes across all branches
+gw proxy     run the HTTPS gateway in the foreground (-d detached, stop)
 gw doctor    diagnose DNS / CA / proxy issues
 gw clean     run teardown hooks for the current branch
 ```
@@ -191,7 +221,8 @@ OAuth callbacks, secure cookies, domain-pinned frontends):
 ## Troubleshooting
 
 - URL not loading → `gw doctor`, then `gw list` to confirm the route exists.
-- `502 no route` → the service isn't running; `gw up` in that worktree.
+- `502 no route` → the service isn't running; `gw up -d` in that worktree,
+  then `gw logs` if it 502s again.
 - `508 loop detected` → the app is proxying to its own public hostname;
   point it at the sibling's `GW_URL_*` instead.
 - Certificate warning → `gw trust` hasn't been run yet. Firefox keeps its
@@ -236,11 +267,12 @@ branch-scoped set of addresses — and make those addresses work over HTTPS.
 
 ## Status
 
-Early (v0.1.0-dev). Works today: init/trust/proxy/up/list/doctor/clean, the
-Claude Code plugin, macOS and Linux. Roadmap: proper daemonization
-(launchd/systemd), full TOML via BurntSushi/toml, truststore via
-smallstep/truststore, `gw prune` for stale routes, `gw wt <branch>` one-shot
-worktree bootstrap, Windows, prebuilt binaries + Homebrew tap.
+Early (v0.2.0-dev). Works today: init/trust/up (-d)/down/logs/list/proxy/
+doctor/clean, detached services with stale-route pruning, the Claude Code
+plugin, macOS and Linux. Roadmap: start the proxy at login (launchd/
+systemd units), full TOML via BurntSushi/toml, truststore via
+smallstep/truststore, `gw wt <branch>` one-shot worktree bootstrap,
+Windows, prebuilt binaries + Homebrew tap.
 
 ## License
 

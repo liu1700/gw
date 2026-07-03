@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -96,6 +97,39 @@ func UnregisterPID(pid int) error {
 		}
 	}
 	return save(m)
+}
+
+// Alive reports whether the process that registered a route still exists.
+// Routes from crashed or KILLed processes would otherwise linger forever.
+func Alive(r Route) bool {
+	if r.PID <= 0 {
+		return true
+	}
+	return syscall.Kill(r.PID, 0) != syscall.ESRCH
+}
+
+// PruneDead drops routes whose owning process is gone and returns the
+// remaining live set.
+func PruneDead() (map[string]Route, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	m, err := Load()
+	if err != nil {
+		return nil, err
+	}
+	changed := false
+	for h, r := range m {
+		if !Alive(r) {
+			delete(m, h)
+			changed = true
+		}
+	}
+	if changed {
+		if err := save(m); err != nil {
+			return m, err
+		}
+	}
+	return m, nil
 }
 
 // Cached is a read-through view for the proxy hot path: reload only when the

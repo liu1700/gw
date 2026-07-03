@@ -31,9 +31,16 @@ cert with no configuration.
 
 **If the repo has a `gw.toml`, never start dev servers directly.** Do not run
 `npm run dev`, `pnpm dev`, `uvicorn`, `flask run`, etc. yourself — run
-`gw up` from the worktree root instead. It assigns deterministic ports,
-injects the env contract, and registers routes with the proxy. Starting
-servers manually recreates the exact port conflicts gw exists to prevent.
+`gw up -d` from the worktree root instead. It assigns deterministic ports,
+injects the env contract, registers routes with the proxy (starting the
+proxy if needed), and detaches: services keep running after your session
+ends. It is idempotent and scoped to this worktree — other worktrees'
+services are untouched. Starting servers manually recreates the exact port
+conflicts gw exists to prevent.
+
+When the user asks you to start services ("起一下服务", "start the dev
+servers", …), run `gw up -d` and report the printed URLs. When they ask to
+stop, run `gw down` (stops only this worktree's services).
 
 When writing tests, scripts, or documentation in a gw-enabled repo, **never
 hardcode `localhost:PORT`** — use the injected env vars below.
@@ -44,19 +51,23 @@ hardcode `localhost:PORT`** — use the injected env vars below.
 gw init      # detect stack (Next.js/Vite/FastAPI/Flask/Django), write gw.toml,
              # and list hardcoded localhost URLs that must be parameterized
 gw trust     # one-time: create local CA and trust it (no sudo on macOS; sudo on Linux)
-gw proxy &   # start the HTTPS gateway daemon (once per machine, :443 or :8443 fallback)
-gw up        # start ALL services for the current worktree's branch (foreground, Ctrl-C stops)
+gw up -d     # start ALL services for this worktree's branch, detached from your
+             # session; auto-starts the proxy; idempotent (reprints URLs if running)
+gw down      # stop this worktree's detached services (other worktrees unaffected)
+gw logs      # show the detached services' logs — check here when something fails
 gw list      # show active routes across all branches
 gw doctor    # diagnose DNS / CA / proxy problems — run this first when URLs don't load
 gw clean     # run teardown hooks for the current branch (e.g. drop its database)
+gw up        # foreground variant (blocks, Ctrl-C stops) — only when the user
+             # explicitly wants to watch logs live
 ```
 
 Typical first-time flow in a repo: `gw init` → fix flagged hardcoded URLs →
-`gw trust` → `gw proxy &` → `gw up`.
+`gw trust` → `gw up -d`.
 
 Typical new-worktree flow: `git worktree add ../repo-auth feature/auth` →
-install deps in it → `gw up`. Nothing else — the branch prefix, ports, certs,
-and (if configured) per-branch database all happen automatically.
+install deps in it → `gw up -d`. Nothing else — the branch prefix, ports,
+certs, and (if configured) per-branch database all happen automatically.
 
 ## Env contract (what `gw up` injects into every service)
 
@@ -117,7 +128,8 @@ in the protocol), which is why databases isolate by name instead.
 ## Troubleshooting
 
 - URL not loading → `gw doctor`, then `gw list` to confirm the route exists.
-- `502 no route` → the service isn't running; `gw up` in that worktree.
+- `502 no route` → the service isn't running; `gw up -d` in that worktree,
+  then `gw logs` if it 502s again (the service may have crashed on boot).
 - `508 loop detected` → the app is proxying to its own public hostname;
   point it at the sibling's `GW_URL_*` instead.
 - Cert warning in browser → `gw trust` hasn't been run (no sudo on macOS,

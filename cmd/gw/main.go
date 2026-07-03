@@ -38,11 +38,20 @@ func main() {
 	case "trust":
 		err = certs.Trust()
 	case "proxy":
-		// MVP runs in foreground; daemonize via `gw proxy &` or a
-		// launchd/systemd unit. TODO: self-daemonize + pidfile.
-		err = proxy.Listen(fallbackProxyPort)
+		switch {
+		case hasArg("stop"):
+			err = up.ProxyStop()
+		case hasArg("-d"), hasArg("--detach"):
+			err = up.ProxyDetach()
+		default:
+			err = proxy.Listen(fallbackProxyPort)
+		}
 	case "up":
-		err = cmdUp()
+		err = cmdUp(hasArg("-d") || hasArg("--detach"))
+	case "down":
+		err = cmdDown()
+	case "logs":
+		err = cmdLogs()
 	case "list":
 		err = cmdList()
 	case "doctor":
@@ -50,7 +59,7 @@ func main() {
 	case "clean":
 		err = cmdClean()
 	case "version":
-		fmt.Println("gw 0.1.0-dev")
+		fmt.Println("gw 0.2.0-dev")
 	default:
 		usage()
 		os.Exit(2)
@@ -64,14 +73,44 @@ func main() {
 func usage() {
 	fmt.Print(`gw — branch-aware local HTTPS gateway
 
-  gw init      detect your stack, generate gw.toml, flag hardcoded URLs
-  gw trust     create the local CA and install it into the system trust store
-  gw proxy     run the HTTPS gateway (foreground; :443 with fallback :8443)
-  gw up        start all services for the current worktree's branch
-  gw list      show active routes across all branches
-  gw doctor    diagnose DNS / CA / proxy issues
-  gw clean     run teardown hooks for the current branch (drop db etc.)
+  gw init         detect your stack, generate gw.toml, flag hardcoded URLs
+  gw trust        create the local CA and trust it (no sudo on macOS)
+  gw up -d        start this worktree's services, detached; starts the proxy
+                  if needed (omit -d to run in the foreground)
+  gw down         stop this worktree's detached services
+  gw logs         show logs from this worktree's detached services
+  gw list         show active routes across all branches
+  gw proxy        run the HTTPS gateway in the foreground (-d detached, stop)
+  gw doctor       diagnose DNS / CA / proxy issues
+  gw clean        run teardown hooks for the current branch (drop db etc.)
 `)
+}
+
+func hasArg(s string) bool {
+	for _, a := range os.Args[2:] {
+		if a == s {
+			return true
+		}
+	}
+	return false
+}
+
+// loadCtx resolves gw.toml and the current branch for worktree-scoped commands.
+func loadCtx() (*config.Config, branchinfo.Info, error) {
+	cwd, _ := os.Getwd()
+	path, err := config.Find(cwd)
+	if err != nil {
+		return nil, branchinfo.Info{}, err
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		return nil, branchinfo.Info{}, err
+	}
+	info, err := branchinfo.Detect(cfg.Root)
+	if err != nil {
+		return nil, branchinfo.Info{}, err
+	}
+	return cfg, info, nil
 }
 
 func cmdInit() error {
@@ -105,35 +144,57 @@ func cmdInit() error {
 			fmt.Printf("  %s:%d  %s\n", h.File, h.Line, truncate(h.Text, 80))
 		}
 	}
-	fmt.Println("\nnext: gw trust && gw proxy &   then in any worktree: gw up")
+	fmt.Println("\nnext: gw trust   then in any worktree: gw up -d")
 	return nil
 }
 
-func cmdUp() error {
-	cwd, _ := os.Getwd()
-	path, err := config.Find(cwd)
+func cmdUp(detached bool) error {
+	cfg, info, err := loadCtx()
 	if err != nil {
 		return err
 	}
-	cfg, err := config.Load(path)
-	if err != nil {
-		return err
-	}
-	info, err := branchinfo.Detect(cfg.Root)
-	if err != nil {
-		return err
+	if detached {
+		return up.Detach(cfg, info)
 	}
 	fmt.Printf("gw: branch %s (%s worktree)\n\n", info.Branch, ternary(info.IsMain, "main", "linked"))
 	return up.Run(cfg, info)
 }
 
+func cmdDown() error {
+	cfg, info, err := loadCtx()
+	if err != nil {
+		return err
+	}
+	return up.Down(cfg, info)
+}
+
+func cmdLogs() error {
+	cfg, info, err := loadCtx()
+	if err != nil {
+		return err
+	}
+	p := up.LogPath(cfg, info)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return fmt.Errorf("no logs for branch %s — start services with `gw up -d` first", info.Branch)
+	}
+	fmt.Printf("== %s ==\n", p)
+	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+	if len(lines) > 120 {
+		fmt.Printf("… (%d earlier lines)\n", len(lines)-120)
+		lines = lines[len(lines)-120:]
+	}
+	fmt.Println(strings.Join(lines, "\n"))
+	return nil
+}
+
 func cmdList() error {
-	routes, err := registry.Load()
+	routes, err := registry.PruneDead()
 	if err != nil {
 		return err
 	}
 	if len(routes) == 0 {
-		fmt.Println("no active routes — run `gw up` in a worktree")
+		fmt.Println("no active routes — run `gw up -d` in a worktree")
 		return nil
 	}
 	for _, r := range routes {
@@ -161,7 +222,7 @@ func cmdDoctor() error {
 		conn.Close()
 		fmt.Printf("✓ proxy on fallback :%d (grant :443 with setcap/sudo for portless URLs)\n", fallbackProxyPort)
 	} else {
-		fmt.Println("✗ proxy not running — run `gw proxy &`")
+		fmt.Println("✗ proxy not running — run `gw proxy -d` (or just `gw up -d`)")
 		ok = false
 	}
 
