@@ -15,11 +15,12 @@ import (
 )
 
 type Route struct {
-	Host    string    `json:"host"`    // e.g. "web.feature-auth.myapp.localhost"
-	Port    int       `json:"port"`    // upstream 127.0.0.1 port
-	PID     int       `json:"pid"`     // owning process, for pruning
-	Branch  string    `json:"branch"`  // for `gw list` display
-	Service string    `json:"service"` // for `gw list` display
+	Host    string    `json:"host"`           // e.g. "web.feature-auth.myapp.localhost"
+	Port    int       `json:"port"`           // upstream 127.0.0.1 port
+	PID     int       `json:"pid"`            // owning process, for pruning
+	Branch  string    `json:"branch"`         // for `gw list` display
+	Service string    `json:"service"`        // for `gw list` display
+	Mode    string    `json:"mode,omitempty"` // config.ProxyHTTP (also "") | ProxyPassthrough | ProxyNone
 	Since   time.Time `json:"since"`
 }
 

@@ -13,11 +13,19 @@ import (
 	"strings"
 )
 
+// Proxy modes: how (and whether) the gateway fronts a service.
+const (
+	ProxyHTTP        = "http"        // default: TLS-terminating HTTPS → HTTP reverse proxy
+	ProxyPassthrough = "passthrough" // SNI-routed TCP splice, TLS NOT terminated (mTLS survives)
+	ProxyNone        = "none"        // supervised process + isolated port only, no routing
+)
+
 type Service struct {
-	Name string
-	Cmd  string            // dev command, e.g. "pnpm dev"
-	Dir  string            // working dir relative to worktree root, default "."
-	Env  map[string]string // per-service extra env (templated)
+	Name  string
+	Cmd   string            // dev command, e.g. "pnpm dev"
+	Dir   string            // working dir relative to worktree root, default "."
+	Proxy string            // ProxyHTTP (default) | ProxyPassthrough | ProxyNone
+	Env   map[string]string // per-service extra env (templated)
 }
 
 type Config struct {
@@ -75,7 +83,7 @@ func Load(path string) (*Config, error) {
 			}
 			section = strings.Trim(raw, "[]")
 			if name, ok := strings.CutPrefix(section, "services."); ok {
-				cfg.Services = append(cfg.Services, Service{Name: name, Dir: ".", Env: map[string]string{}})
+				cfg.Services = append(cfg.Services, Service{Name: name, Dir: ".", Proxy: ProxyHTTP, Env: map[string]string{}})
 				cur = &cfg.Services[len(cfg.Services)-1]
 			} else {
 				cur = nil
@@ -110,6 +118,14 @@ func Load(path string) (*Config, error) {
 				cur.Cmd = val
 			case "dir":
 				cur.Dir = val
+			case "proxy":
+				switch val {
+				case ProxyHTTP, ProxyPassthrough, ProxyNone:
+					cur.Proxy = val
+				default:
+					return nil, fmt.Errorf("%s:%d: proxy = %q — must be %q, %q or %q",
+						path, line, val, ProxyHTTP, ProxyPassthrough, ProxyNone)
+				}
 			default:
 				cur.Env[key] = val
 			}

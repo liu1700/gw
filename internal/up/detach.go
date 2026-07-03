@@ -68,7 +68,14 @@ func Down(cfg *config.Config, info branchinfo.Info) error {
 
 func printHosts(cfg *config.Config, info branchinfo.Info) {
 	for _, svc := range cfg.Services {
-		fmt.Printf("  %-8s → https://%s\n", svc.Name, cfg.HostFor(svc.Name, info.Slug, info.IsMain))
+		switch svc.Proxy {
+		case config.ProxyPassthrough:
+			fmt.Printf("  %-8s → https://%s  (TLS passthrough)\n", svc.Name, cfg.HostFor(svc.Name, info.Slug, info.IsMain))
+		case config.ProxyNone:
+			fmt.Printf("  %-8s → 127.0.0.1:%d  (not proxied)\n", svc.Name, branchinfo.PortFor(info.Branch, svc.Name))
+		default:
+			fmt.Printf("  %-8s → https://%s\n", svc.Name, cfg.HostFor(svc.Name, info.Slug, info.IsMain))
+		}
 	}
 }
 

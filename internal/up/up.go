@@ -46,8 +46,11 @@ func Run(cfg *config.Config, info branchinfo.Info) error {
 		host := cfg.HostFor(svc.Name, info.Slug, info.IsMain)
 		plan = append(plan, planned{svc, port, host})
 		upper := strings.ToUpper(svc.Name)
-		shared["GW_URL_"+upper] = scheme + "://" + host
 		shared["GW_PORT_"+upper] = fmt.Sprint(port)
+		if svc.Proxy == config.ProxyNone {
+			continue // not routed — a GW_URL_* would point nowhere
+		}
+		shared["GW_URL_"+upper] = scheme + "://" + host
 		// Framework conventions for exposing env to browser bundles.
 		shared["NEXT_PUBLIC_GW_URL_"+upper] = scheme + "://" + host
 		shared["VITE_GW_URL_"+upper] = scheme + "://" + host
@@ -74,8 +77,10 @@ func Run(cfg *config.Config, info branchinfo.Info) error {
 		env = append(env,
 			"PORT="+fmt.Sprint(p.port),
 			"HOST=127.0.0.1",
-			"GW_URL="+scheme+"://"+p.host,
 		)
+		if p.svc.Proxy != config.ProxyNone {
+			env = append(env, "GW_URL="+scheme+"://"+p.host)
+		}
 		for k, v := range p.svc.Env {
 			env = append(env, k+"="+config.Render(v, info.Branch, info.Slug))
 		}
@@ -96,8 +101,16 @@ func Run(cfg *config.Config, info branchinfo.Info) error {
 		registry.Register(registry.Route{
 			Host: p.host, Port: p.port, PID: self,
 			Branch: info.Branch, Service: p.svc.Name,
+			Mode: routeMode(p.svc),
 		})
-		fmt.Printf("  %-8s → %s://%s  (:%d)\n", p.svc.Name, scheme, p.host, p.port)
+		switch p.svc.Proxy {
+		case config.ProxyPassthrough:
+			fmt.Printf("  %-8s → %s://%s  (:%d, TLS passthrough)\n", p.svc.Name, scheme, p.host, p.port)
+		case config.ProxyNone:
+			fmt.Printf("  %-8s → 127.0.0.1:%d  (not proxied)\n", p.svc.Name, p.port)
+		default:
+			fmt.Printf("  %-8s → %s://%s  (:%d)\n", p.svc.Name, scheme, p.host, p.port)
+		}
 
 		prefix := fmt.Sprintf("[%s] ", p.svc.Name)
 		wg.Add(2)
@@ -126,13 +139,23 @@ func expandPort(cmd string, port int) string {
 	return strings.ReplaceAll(cmd, "$PORT", fmt.Sprint(port))
 }
 
+// routeMode maps a service's proxy mode to its registry representation:
+// the default (http) is stored as "" so pre-mode route files stay valid.
+func routeMode(svc config.Service) string {
+	if svc.Proxy == config.ProxyHTTP {
+		return ""
+	}
+	return svc.Proxy
+}
+
 func runHook(cfg *config.Config, info branchinfo.Info, shared map[string]string, name string) error {
 	h, ok := cfg.Hooks[name]
 	if !ok || h == "" {
 		return nil
 	}
-	// Idempotence marker: hooks.setup runs once per branch.
-	marker := filepath.Join(stateDir(), "hooks", info.Slug+"."+name)
+	// Idempotence marker: hooks.setup runs once per branch. Scoped by domain
+	// so equally-named branches in different projects don't share a marker.
+	marker := filepath.Join(stateDir(), "hooks", ident(cfg, info)+"."+name)
 	if name == "setup" {
 		if _, err := os.Stat(marker); err == nil {
 			return nil
@@ -155,7 +178,7 @@ func runHook(cfg *config.Config, info branchinfo.Info, shared map[string]string,
 		os.WriteFile(marker, nil, 0o644)
 	}
 	if name == "teardown" {
-		os.Remove(filepath.Join(stateDir(), "hooks", info.Slug+".setup"))
+		os.Remove(filepath.Join(stateDir(), "hooks", ident(cfg, info)+".setup"))
 	}
 	return nil
 }

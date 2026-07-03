@@ -78,6 +78,7 @@ certs, and (if configured) per-branch database all happen automatically.
 | `GW_URL_<SERVICE>` | `GW_URL_API=https://api.feature-auth...` | calling sibling services |
 | `NEXT_PUBLIC_GW_URL_<SERVICE>` | same value | browser-side code in Next.js |
 | `VITE_GW_URL_<SERVICE>` | same value | browser-side code in Vite |
+| `GW_PORT_<SERVICE>` | `GW_PORT_WORKER=21387` | direct 127.0.0.1 access — the only address for `proxy = "none"` services |
 | `GW_BRANCH` / `GW_SLUG` | `feature/auth` / `feature-auth` | naming, logging |
 | `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE` | `~/.gw/ca.pem` | server-to-server HTTPS calls trust the local CA automatically |
 
@@ -118,12 +119,38 @@ teardown = "dropdb myapp_{branch_snake}"
 
 Templates: `{branch}` (raw), `{slug}` (DNS-safe, `feature-auth`),
 `{branch_snake}` (`feature_auth`, for database names). `hooks.setup` runs
-once per branch (idempotent via marker file); `gw clean` runs teardown.
+once per branch **before services start** (idempotent via marker file) — use
+it for bootstrap work like creating databases, running migrations, or
+minting an app's own certificates; `gw clean` runs teardown.
+
+### Non-HTTP services: `proxy = "passthrough" | "none"`
+
+By default gw terminates TLS and reverse-proxies HTTP. Services that can't
+live behind that (mTLS servers that authenticate the *client's* certificate,
+gRPC-over-TLS, anything speaking its own TLS) declare a mode:
+
+```toml
+[services.dataplane]
+cmd = "orlop-server --listen 127.0.0.1:$PORT"
+proxy = "passthrough"   # SNI-routed raw TCP splice — gw does NOT terminate
+                        # TLS, so client certs reach the server intact
+
+[services.worker]
+cmd = "worker --listen 127.0.0.1:$PORT"
+proxy = "none"          # supervised + isolated $PORT only, no routing;
+                        # siblings reach it at 127.0.0.1:$GW_PORT_WORKER
+```
+
+Both kinds are still started/stopped/logged by `gw up -d` / `gw down` /
+`gw logs` and get branch-hashed ports. A `passthrough` service must present
+a certificate valid for its gw hostname (`$GW_URL` minus the scheme) — mint
+one in `hooks.setup` with the app's own CA. Clients must connect with SNI
+(any TLS client dialing the hostname does this automatically).
 
 Backing services (Postgres/Redis) are NOT started by gw — the model is one
-shared server, per-branch logical isolation via templated names. HTTP
-services are routed by hostname; raw-TCP services can't be (no Host concept
-in the protocol), which is why databases isolate by name instead.
+shared server, per-branch logical isolation via templated names. Plaintext
+TCP protocols carry no hostname at all, which is why databases isolate by
+*name* (`{branch_snake}`) instead of by route.
 
 ## Installing gw
 
@@ -144,6 +171,9 @@ PATH hint if needed. Verify with `gw version`.
   then `gw logs` if it 502s again (the service may have crashed on boot).
 - `508 loop detected` → the app is proxying to its own public hostname;
   point it at the sibling's `GW_URL_*` instead.
+- `421 misdirected request` → that hostname belongs to a `proxy = "passthrough"`
+  or `"none"` service: speak TLS to it directly (passthrough) or connect to
+  `127.0.0.1:$GW_PORT_<SERVICE>` (none) — it has no HTTP surface behind gw.
 - Cert warning in browser → `gw trust` hasn't been run (no sudo on macOS,
   sudo once on Linux; ask the user before running it).
 - `:443 permission denied` (Linux) → proxy fell back to `:8443`; grant with
