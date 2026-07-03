@@ -4,7 +4,7 @@
 agents.**
 
 [![ci](https://github.com/liu1700/gw/actions/workflows/ci.yml/badge.svg)](https://github.com/liu1700/gw/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/liu1700/gw)](https://goreportcard.com/report/github.com/liu1700/gw)
+[![release](https://img.shields.io/github/v/release/liu1700/gw)](https://github.com/liu1700/gw/releases)
 [![License: MIT](https://img.shields.io/github/license/liu1700/gw)](LICENSE)
 
 Every git worktree gets trusted HTTPS URLs derived from its branch name —
