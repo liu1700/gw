@@ -33,13 +33,19 @@ func Run(cfg *config.Config, info branchinfo.Info) error {
 		host string
 	}
 	var plan []planned
+	// Make Node/Python HTTP clients trust our CA out of the box. NODE_EXTRA_CA_CERTS
+	// is additive (Node appends it to its roots), so it gets the gw CA alone;
+	// REQUESTS_CA_BUNDLE / SSL_CERT_FILE *replace* the trust store in Python/OpenSSL,
+	// so they get a bundle that also carries the public roots — otherwise the
+	// service's own outbound HTTPS to public endpoints would fail to verify.
+	bundle := certs.CombinedBundlePath()
 	shared := map[string]string{ // env every service receives
-		"GW_BRANCH": info.Branch,
-		"GW_SLUG":   info.Slug,
-		"GW_DOMAIN": cfg.Domain,
-		// Make Node/Python HTTP clients trust our CA out of the box.
+		"GW_BRANCH":           info.Branch,
+		"GW_SLUG":             info.Slug,
+		"GW_DOMAIN":           cfg.Domain,
 		"NODE_EXTRA_CA_CERTS": certs.CACertPath(),
-		"REQUESTS_CA_BUNDLE":  certs.CACertPath(),
+		"REQUESTS_CA_BUNDLE":  bundle,
+		"SSL_CERT_FILE":       bundle,
 	}
 	for _, svc := range cfg.Services {
 		port := branchinfo.PortFor(info.Branch, svc.Name)

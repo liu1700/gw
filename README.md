@@ -167,7 +167,8 @@ cookies/localStorage, separate databases if you configured hooks (below).
 | `NEXT_PUBLIC_GW_URL_<SERVICE>`, `VITE_GW_URL_<SERVICE>` | same value | browser-side code (Next.js / Vite) |
 | `GW_PORT_<SERVICE>` | `GW_PORT_WORKER=21387` | direct 127.0.0.1 access (`proxy = "none"` services) |
 | `GW_BRANCH`, `GW_SLUG` | `feature/auth`, `feature-auth` | naming, logging |
-| `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE` | `~/.gw/ca.pem` | server-to-server HTTPS trusts the local CA |
+| `NODE_EXTRA_CA_CERTS` | `~/.gw/ca.pem` | Node trusts the gw CA (added to its roots) |
+| `REQUESTS_CA_BUNDLE`, `SSL_CERT_FILE` | `~/.gw/ca-bundle.pem` | Python/OpenSSL trust the gw CA **plus** public roots (combined bundle, so outbound HTTPS still works) |
 
 Plaintext TCP (Postgres, Redis) carries no hostname, so gw isolates those
 by *name* instead: one shared Postgres, one database per branch, templated

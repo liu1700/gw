@@ -80,7 +80,8 @@ certs, and (if configured) per-branch database all happen automatically.
 | `VITE_GW_URL_<SERVICE>` | same value | browser-side code in Vite |
 | `GW_PORT_<SERVICE>` | `GW_PORT_WORKER=21387` | direct 127.0.0.1 access — the only address for `proxy = "none"` services |
 | `GW_BRANCH` / `GW_SLUG` | `feature/auth` / `feature-auth` | naming, logging |
-| `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE` | `~/.gw/ca.pem` | server-to-server HTTPS calls trust the local CA automatically |
+| `NODE_EXTRA_CA_CERTS` | `~/.gw/ca.pem` | Node adds the gw CA to its roots (additive) |
+| `REQUESTS_CA_BUNDLE`, `SSL_CERT_FILE` | `~/.gw/ca-bundle.pem` | Python/OpenSSL trust the gw CA **and** public roots — the bundle combines them, so outbound HTTPS to public endpoints still verifies |
 
 When editing app code, replace hardcoded addresses like this:
 
