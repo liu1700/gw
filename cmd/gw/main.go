@@ -231,6 +231,14 @@ func loadCtx() (*config.Config, branchinfo.Info, error) {
 	if err != nil {
 		return nil, branchinfo.Info{}, err
 	}
+	// Anchor to the worktree that contains cwd, not the directory holding
+	// gw.toml. A worktree nested inside the main repo whose branch hasn't
+	// committed its own gw.toml would otherwise resolve the *main* repo's
+	// branch (bare domain) and run the main repo's files. gw.toml is shared
+	// config; the branch and working tree come from the current worktree.
+	if root, err := branchinfo.WorktreeRoot(cwd); err == nil {
+		cfg.Root = root
+	}
 	info, err := branchinfo.Detect(cfg.Root)
 	if err != nil {
 		return nil, branchinfo.Info{}, err
@@ -384,16 +392,7 @@ func cmdDoctor() error {
 }
 
 func cmdClean() error {
-	cwd, _ := os.Getwd()
-	path, err := config.Find(cwd)
-	if err != nil {
-		return err
-	}
-	cfg, err := config.Load(path)
-	if err != nil {
-		return err
-	}
-	info, err := branchinfo.Detect(cfg.Root)
+	cfg, info, err := loadCtx()
 	if err != nil {
 		return err
 	}

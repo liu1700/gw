@@ -45,6 +45,17 @@ stop, run `gw down` (stops only this worktree's services).
 When writing tests, scripts, or documentation in a gw-enabled repo, **never
 hardcode `localhost:PORT`** — use the injected env vars below.
 
+## Worktree & config discovery
+
+gw finds `gw.toml` by walking **up** from the current directory to the first
+one that has it. The **branch and working tree**, though, come from the
+worktree that contains your cwd (`git rev-parse --show-toplevel` + that
+worktree's `HEAD`) — not from wherever `gw.toml` was found. So a linked
+worktree **nested inside** the main repo resolves its own branch subdomain
+even when it shares the main repo's committed `gw.toml`. Run gw commands from
+inside the worktree you mean; the committed `gw.toml` is shared config, while
+the branch is per-worktree.
+
 ## Commands
 
 ```
