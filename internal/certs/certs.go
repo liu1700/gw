@@ -155,8 +155,86 @@ func (c *CA) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error
 	return leaf, nil
 }
 
-// CACertPath returns the PEM path, for NODE_EXTRA_CA_CERTS / REQUESTS_CA_BUNDLE injection.
+// CACertPath returns the gw-CA-only PEM path. Safe for *additive* trust vars
+// like NODE_EXTRA_CA_CERTS, which Node appends to its built-in roots.
 func CACertPath() string { p, _ := caPaths(); return p }
+
+// CombinedBundlePath returns a PEM bundle of the public system roots plus the
+// local gw CA, generating it on demand under the state dir.
+//
+// It exists for *replacer* trust vars — REQUESTS_CA_BUNDLE, SSL_CERT_FILE — that
+// Python/OpenSSL treat as the complete CA set rather than an addition. Pointing
+// those at the gw-CA-only file (as gw once did) makes a service trust branch
+// URLs but breaks its own outbound HTTPS to public endpoints, because every
+// real root disappears. Bundling the system roots alongside gw's CA keeps both
+// working. Falls back to the gw-CA-only path if the system roots can't be
+// located, which is no worse than the previous behavior.
+func CombinedBundlePath() string {
+	caPath, _ := caPaths()
+	out := filepath.Join(stateDir(), "ca-bundle.pem")
+
+	// Reuse an existing bundle unless the CA is newer (e.g. regenerated).
+	if bi, err := os.Stat(out); err == nil {
+		if ci, err := os.Stat(caPath); err == nil && !ci.ModTime().After(bi.ModTime()) {
+			return out
+		}
+	}
+
+	caPEM, err := os.ReadFile(caPath)
+	if err != nil {
+		return caPath // CA not created yet; nothing to combine
+	}
+	sys := systemRootsPEM()
+	if len(sys) == 0 {
+		return caPath // couldn't find public roots: don't shadow them
+	}
+
+	var buf []byte
+	buf = append(buf, sys...)
+	if len(buf) > 0 && buf[len(buf)-1] != '\n' {
+		buf = append(buf, '\n')
+	}
+	buf = append(buf, caPEM...)
+	if err := os.WriteFile(out, buf, 0o644); err != nil {
+		return caPath
+	}
+	return out
+}
+
+// systemRootsPEM returns the platform's public root certificates as PEM, or nil
+// if none can be located. It mirrors the well-known bundle locations Go's own
+// crypto/x509 consults, with a keychain export as a macOS fallback.
+func systemRootsPEM() []byte {
+	for _, f := range []string{
+		"/etc/ssl/certs/ca-certificates.crt", // Debian/Ubuntu/Alpine
+		"/etc/pki/tls/certs/ca-bundle.crt",   // Fedora/RHEL/CentOS
+		"/etc/ssl/ca-bundle.pem",             // openSUSE
+		"/etc/ssl/cert.pem",                  // macOS (LibreSSL), BSD
+	} {
+		if b, err := os.ReadFile(f); err == nil && len(b) > 0 {
+			return b
+		}
+	}
+	if runtime.GOOS == "darwin" {
+		return macOSKeychainRoots()
+	}
+	return nil
+}
+
+// macOSKeychainRoots exports trusted root certificates from the system
+// keychains as PEM, so services get the same public trust the OS provides.
+func macOSKeychainRoots() []byte {
+	var out []byte
+	for _, kc := range []string{
+		"/System/Library/Keychains/SystemRootCertificates.keychain",
+		"/Library/Keychains/System.keychain",
+	} {
+		if b, err := exec.Command("security", "find-certificate", "-a", "-p", kc).Output(); err == nil {
+			out = append(out, b...)
+		}
+	}
+	return out
+}
 
 // Trust installs the CA into the trust store. Best-effort per platform;
 // prints manual instructions on failure. (Swap for smallstep/truststore later.)
