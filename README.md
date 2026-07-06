@@ -152,7 +152,14 @@ cookies/localStorage, separate databases if you configured hooks (below).
 
 - **Hostname routing.** One proxy on `:443` (fallback `:8443`) maps
   `{service}.{branch-slug}.{domain}` to the right local port via a shared
-  route table. WebSockets pass through.
+  route table. It serves HTTP/2 to the browser (with HTTP/1.1 fallback) and
+  transparently upgrades WebSocket connections to your service.
+- **gw terminates inbound TLS; your service speaks plain HTTP.** The gateway
+  owns the certificate for the branch hostname, so your dev server should
+  bind **plain HTTP** on `127.0.0.1:$PORT` — drop your own `--ssl`/cert
+  flags. gw handles HTTPS at the edge; double-terminating TLS just breaks the
+  handshake. (Outbound HTTPS from your app is unaffected — the injected CA
+  bundle trusts both gw and the public roots.)
 - **Certificates on demand.** `gw trust` creates a local CA (mkcert-style).
   The proxy signs a leaf certificate for whatever server name arrives, so
   any branch subdomain gets a green lock with no wildcard cert to manage.
@@ -265,9 +272,25 @@ OAuth callbacks, secure cookies, domain-pinned frontends):
 
 ## Troubleshooting
 
+Run `gw doctor` first — it verifies the whole chain for the current branch
+(CA trust, proxy, DNS, each service's real HTTPS response) and prints the
+specific cause and fix. The map below is the same reasoning by hand:
+
 - URL not loading → `gw doctor`, then `gw list` to confirm the route exists.
 - `502 no route` → the service isn't running; `gw up -d` in that worktree,
   then `gw logs` if it 502s again.
+- App loads but "can't reach the backend" → is the backend actually up?
+  Check `gw logs`. A service that crashes on boot is reported by `gw up -d`
+  (non-zero exit, names the service) and by `gw doctor` — if `gw list` shows
+  no route for it, it died; the log has the reason.
+- WebSocket stuck on "connecting…" → the WS URL your frontend uses must
+  include the **path** (e.g. `wss://api.<branch>.<domain>/ws`, not just the
+  host); build it from `GW_URL_API`. A 403 on the upgrade that lacks *your
+  app's* response headers is your app's own auth, not gw.
+- A CLI tool (curl, wget) can't resolve `*.<domain>.localhost` → browsers
+  resolve `.localhost` natively, but some resolvers don't. Add an
+  `/etc/hosts` entry (`127.0.0.1  web.feature-auth.myapp.localhost`) or use a
+  real domain with a wildcard record (see [Real domains](#real-domains)).
 - `508 loop detected` → the app is proxying to its own public hostname;
   point it at the sibling's `GW_URL_*` instead.
 - `421 misdirected request` → that hostname is a `proxy = "none"` service

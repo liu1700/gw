@@ -277,6 +277,8 @@ func cmdInit() error {
 		}
 	}
 	fmt.Println("\nnext: gw trust   then in any worktree: gw up -d")
+	fmt.Println("tip: on Claude Code? install the plugin so agents drive gw for you —")
+	fmt.Println("     /plugin marketplace add liu1700/gw && /plugin install gw@gw-marketplace")
 	return nil
 }
 

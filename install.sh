@@ -41,5 +41,13 @@ echo "gw: installed $("$DIR/gw" version) to $DIR/gw"
 
 case ":$PATH:" in
   *":$DIR:"*) ;;
-  *) echo "gw: note — $DIR is not in your PATH; add:  export PATH=\"$DIR:\$PATH\"" ;;
+  *)
+    rc="$HOME/.profile"
+    case "${SHELL:-}" in
+      */zsh) rc="$HOME/.zshrc" ;;
+      */bash) rc="$HOME/.bashrc" ;;
+    esac
+    echo "gw: note — $DIR is not on your PATH. To fix it permanently, run:"
+    echo "     echo 'export PATH=\"$DIR:\$PATH\"' >> \"$rc\" && export PATH=\"$DIR:\$PATH\""
+    ;;
 esac
