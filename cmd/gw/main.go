@@ -34,8 +34,38 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
+
+	cmd := os.Args[1]
+	args := os.Args[2:]
+
+	// Top-level help: `gw`, `gw help`, `gw -h`, `gw --help`.
+	if cmd == "help" || cmd == "-h" || cmd == "--help" {
+		usage()
+		return
+	}
+
+	allowed, known := commandFlags[cmd]
+	if !known {
+		fmt.Fprintf(os.Stderr, "gw: unknown command %q\n\n", cmd)
+		usage()
+		os.Exit(2)
+	}
+
+	// `gw <cmd> -h|--help` prints subcommand help and exits with no side effects.
+	if hasArg("-h") || hasArg("--help") {
+		fmt.Print(subUsage[cmd])
+		return
+	}
+
+	// Reject unrecognized flags rather than silently executing the command.
+	if err := validateFlags(cmd, args, allowed); err != nil {
+		fmt.Fprintln(os.Stderr, "gw:", err)
+		fmt.Fprint(os.Stderr, "\n", subUsage[cmd])
+		os.Exit(2)
+	}
+
 	var err error
-	switch os.Args[1] {
+	switch cmd {
 	case "init":
 		err = cmdInit()
 	case "trust":
@@ -63,14 +93,106 @@ func main() {
 		err = cmdClean()
 	case "version":
 		fmt.Println("gw " + version)
-	default:
-		usage()
-		os.Exit(2)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "gw:", err)
 		os.Exit(1)
 	}
+}
+
+// commandFlags lists the recognized subcommands and the optional flags each
+// accepts (beyond -h/--help, which every command handles). Positional args
+// such as `proxy stop` are validated by the command itself, not here.
+var commandFlags = map[string][]string{
+	"init":    {},
+	"trust":   {},
+	"proxy":   {"-d", "--detach"},
+	"up":      {"-d", "--detach"},
+	"down":    {},
+	"logs":    {},
+	"list":    {},
+	"doctor":  {},
+	"clean":   {},
+	"version": {},
+}
+
+// validateFlags returns an error if args contains a dash-prefixed flag that the
+// command does not accept. Non-flag positionals are left for the command.
+func validateFlags(cmd string, args, allowed []string) error {
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		ok := false
+		for _, f := range allowed {
+			if a == f {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return fmt.Errorf("unknown flag %q for `gw %s` (try `gw %s --help`)", a, cmd, cmd)
+		}
+	}
+	return nil
+}
+
+// subUsage maps each subcommand to its help text, printed on `gw <cmd> --help`.
+var subUsage = map[string]string{
+	"init": `gw init — detect your stack, generate gw.toml, flag hardcoded URLs
+
+  usage: gw init
+
+Scans the current directory for a known framework, writes gw.toml, and
+reports hardcoded addresses to replace with the injected GW_URL_* env vars.
+`,
+	"trust": `gw trust — create the local CA and add it to the system trust store
+
+  usage: gw trust
+
+No sudo required on macOS. Modifies the system trust store.
+`,
+	"up": `gw up — start this worktree's services
+
+  usage: gw up [-d|--detach]
+
+  -d, --detach   run services in the background; starts the proxy if needed
+
+Without -d, services run in the foreground.
+`,
+	"down": `gw down — stop this worktree's detached services
+
+  usage: gw down
+`,
+	"logs": `gw logs — show logs from this worktree's detached services
+
+  usage: gw logs
+`,
+	"list": `gw list — show active routes across all branches
+
+  usage: gw list
+`,
+	"proxy": `gw proxy — run the HTTPS gateway
+
+  usage: gw proxy [-d|--detach | stop]
+
+  -d, --detach   run the proxy in the background
+  stop           stop the detached proxy
+
+Without arguments, runs the proxy in the foreground.
+`,
+	"doctor": `gw doctor — diagnose DNS / CA / proxy issues
+
+  usage: gw doctor
+`,
+	"clean": `gw clean — run teardown hooks for the current branch
+
+  usage: gw clean
+`,
+	"version": `gw version — print the gw version
+
+  usage: gw version
+`,
 }
 
 func usage() {
