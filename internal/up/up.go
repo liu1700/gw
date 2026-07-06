@@ -111,10 +111,23 @@ func Run(cfg *config.Config, info branchinfo.Info) error {
 		})
 		fmt.Println(serviceLine(p.svc.Name, p.host, p.port, p.svc.Proxy))
 
+		// Per-service supervision: drain the pipes (EOF == the process exited),
+		// reap it, then drop its route immediately. Without this a crashed
+		// service's route lingers until the whole `gw up` exits, and a detached
+		// start can't tell a healthy service from one that died on boot.
 		prefix := fmt.Sprintf("[%s] ", p.svc.Name)
-		wg.Add(2)
-		go func() { defer wg.Done(); pipe(prefix, stdout) }()
-		go func() { defer wg.Done(); pipe(prefix, stderr) }()
+		var pipes sync.WaitGroup
+		pipes.Add(2)
+		go func() { defer pipes.Done(); pipe(prefix, stdout) }()
+		go func() { defer pipes.Done(); pipe(prefix, stderr) }()
+		wg.Add(1)
+		go func(cmd *exec.Cmd, host, name string) {
+			defer wg.Done()
+			pipes.Wait()
+			err := cmd.Wait()
+			registry.Unregister(host)
+			fmt.Printf("%sgw: service exited (%s)\n", prefix, exitReason(err))
+		}(cmd, p.host, p.svc.Name)
 	}
 	fmt.Println("\ngw: all services up — Ctrl-C to stop")
 
@@ -130,6 +143,14 @@ func Run(cfg *config.Config, info branchinfo.Info) error {
 	shutdown(procs)
 	registry.UnregisterPID(self)
 	return nil
+}
+
+// exitReason renders a service process's exit for the aggregated log.
+func exitReason(err error) string {
+	if err == nil {
+		return "exit status 0"
+	}
+	return err.Error()
 }
 
 // expandPort substitutes $PORT in the command string for frameworks that

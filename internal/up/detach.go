@@ -48,6 +48,15 @@ func Detach(cfg *config.Config, info branchinfo.Info) error {
 		os.Remove(pp)
 		return fmt.Errorf("services failed to start:\n%s\n(full log: %s)", tailLines(string(b), 15), lp)
 	}
+	// The supervisor survives as long as *any* service lives, so a single
+	// service that crashed on boot would otherwise be reported as "up". Each
+	// service registers its route on start and drops it on exit, so a missing
+	// route means that service died.
+	if crashed := crashedServices(cfg, info); len(crashed) > 0 {
+		b, _ := os.ReadFile(lp)
+		return fmt.Errorf("%s crashed on startup:\n%s\n(full log: %s)",
+			strings.Join(crashed, ", "), tailLines(string(b), 15), lp)
+	}
 	fmt.Printf("gw: services for branch %s up (detached, pid %d)\n", info.Branch, pid)
 	printHosts(cfg, info)
 	fmt.Println("\n  logs: gw logs    stop: gw down")
@@ -79,6 +88,25 @@ func printHosts(cfg *config.Config, info branchinfo.Info) {
 			fmt.Println(serviceLine(svc.Name, host, branchinfo.PortFor(info.Branch, svc.Name), svc.Proxy))
 		}
 	}
+}
+
+// crashedServices returns the names of services whose route is no longer
+// registered — i.e. they exited after starting. Registration happens the
+// moment a service is spawned and is dropped when it exits, so an absent
+// route after the startup grace period means the service died.
+func crashedServices(cfg *config.Config, info branchinfo.Info) []string {
+	routes, err := registry.Load()
+	if err != nil {
+		return nil
+	}
+	var crashed []string
+	for _, svc := range cfg.Services {
+		host := cfg.HostFor(svc.Name, info.Slug, info.IsMain)
+		if _, ok := routes[host]; !ok {
+			crashed = append(crashed, svc.Name)
+		}
+	}
+	return crashed
 }
 
 func tailLines(s string, n int) string {

@@ -124,6 +124,15 @@ once per branch **before services start** (idempotent via marker file) — use
 it for bootstrap work like creating databases, running migrations, or
 minting an app's own certificates; `gw clean` runs teardown.
 
+**`cmd` execution model.** Each `cmd` runs as a single `sh -c "<cmd>"`, so
+shell features (`&&`, `|`, `$VAR`, redirection) work. `$PORT` is both
+string-substituted by gw and present in the environment. Because the whole
+string is already inside gw's own quotes, a `cmd` that itself needs nested
+quotes (setting env, sourcing a file, chaining steps) is fragile — put that
+logic in a script and point `cmd` at it: `cmd = "bash run.sh"`. gw watches
+each process and reports one that exits on boot as failed (`gw up -d` exits
+non-zero and names the service); a crashed service is dropped from `gw list`.
+
 ### Non-HTTP services: `proxy = "passthrough" | "none"`
 
 By default gw terminates TLS and reverse-proxies HTTP. Services that can't
