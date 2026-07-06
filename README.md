@@ -246,7 +246,8 @@ gw down      stop this worktree's detached services
 gw logs      show logs from this worktree's detached services
 gw list      show active routes across all branches
 gw proxy     run the HTTPS gateway in the foreground (-d detached, stop)
-gw doctor    diagnose DNS / CA / proxy issues
+gw doctor    verify the end-to-end path for this branch (CA trust, proxy,
+             DNS, each service's HTTPS response); non-zero exit on any failure
 gw clean     run teardown hooks for the current branch
 ```
 

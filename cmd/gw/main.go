@@ -10,7 +10,6 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -344,68 +343,12 @@ func cmdList() error {
 	return nil
 }
 
-func cmdDoctor() error {
-	ok := true
-
-	// CA present?
-	if _, err := os.Stat(certs.CACertPath()); err != nil {
-		fmt.Println("✗ local CA missing — run `gw trust`")
-		ok = false
-	} else {
-		fmt.Println("✓ local CA exists (system trust not verified — check browser padlock)")
-	}
-
-	// Proxy reachable?
-	if conn, err := net.Dial("tcp", "127.0.0.1:443"); err == nil {
-		conn.Close()
-		fmt.Println("✓ something is listening on :443")
-	} else if conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", fallbackProxyPort)); err == nil {
-		conn.Close()
-		fmt.Printf("✓ proxy on fallback :%d (grant :443 with setcap/sudo for portless URLs)\n", fallbackProxyPort)
-	} else {
-		fmt.Println("✗ proxy not running — run `gw proxy -d` (or just `gw up -d`)")
-		ok = false
-	}
-
-	// Domain resolution.
-	if cwd, err := os.Getwd(); err == nil {
-		if p, err := config.Find(cwd); err == nil {
-			if cfg, err := config.Load(p); err == nil {
-				probe := "gw-doctor-probe." + cfg.Domain
-				if addrs, err := net.LookupHost(probe); err == nil && has127(addrs) {
-					fmt.Printf("✓ *.%s resolves to 127.0.0.1\n", cfg.Domain)
-				} else if strings.HasSuffix(cfg.Domain, ".localhost") {
-					fmt.Printf("~ *.%s: browsers resolve .localhost natively; CLI tools may need /etc/hosts\n", cfg.Domain)
-				} else {
-					fmt.Printf("✗ *.%s does not resolve to 127.0.0.1\n", cfg.Domain)
-					fmt.Println("  add a wildcard A record: *." + cfg.Domain + " → 127.0.0.1")
-					fmt.Println("  (or run local dnsmasq; see README → DNS)")
-					ok = false
-				}
-			}
-		}
-	}
-	if ok {
-		fmt.Println("all good ✓")
-	}
-	return nil
-}
-
 func cmdClean() error {
 	cfg, info, err := loadCtx()
 	if err != nil {
 		return err
 	}
 	return up.Teardown(cfg, info)
-}
-
-func has127(addrs []string) bool {
-	for _, a := range addrs {
-		if a == "127.0.0.1" || a == "::1" {
-			return true
-		}
-	}
-	return false
 }
 
 func truncate(s string, n int) string {

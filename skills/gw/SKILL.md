@@ -67,7 +67,9 @@ gw up -d     # start ALL services for this worktree's branch, detached from your
 gw down      # stop this worktree's detached services (other worktrees unaffected)
 gw logs      # show the detached services' logs — check here when something fails
 gw list      # show active routes across all branches
-gw doctor    # diagnose DNS / CA / proxy problems — run this first when URLs don't load
+gw doctor    # verify the end-to-end path for this branch — CA trusted, proxy up,
+             # hostname resolves, each service actually responds over HTTPS; run
+             # this first when URLs don't load. Exits non-zero if anything fails.
 gw clean     # run teardown hooks for the current branch (e.g. drop its database)
 gw up        # foreground variant (blocks, Ctrl-C stops) — only when the user
              # explicitly wants to watch logs live
