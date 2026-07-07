@@ -45,6 +45,17 @@ stop, run `gw down` (stops only this worktree's services).
 When writing tests, scripts, or documentation in a gw-enabled repo, **never
 hardcode `localhost:PORT`** — use the injected env vars below.
 
+## Worktree & config discovery
+
+gw finds `gw.toml` by walking **up** from the current directory to the first
+one that has it. The **branch and working tree**, though, come from the
+worktree that contains your cwd (`git rev-parse --show-toplevel` + that
+worktree's `HEAD`) — not from wherever `gw.toml` was found. So a linked
+worktree **nested inside** the main repo resolves its own branch subdomain
+even when it shares the main repo's committed `gw.toml`. Run gw commands from
+inside the worktree you mean; the committed `gw.toml` is shared config, while
+the branch is per-worktree.
+
 ## Commands
 
 ```
@@ -56,7 +67,9 @@ gw up -d     # start ALL services for this worktree's branch, detached from your
 gw down      # stop this worktree's detached services (other worktrees unaffected)
 gw logs      # show the detached services' logs — check here when something fails
 gw list      # show active routes across all branches
-gw doctor    # diagnose DNS / CA / proxy problems — run this first when URLs don't load
+gw doctor    # verify the end-to-end path for this branch — CA trusted, proxy up,
+             # hostname resolves, each service actually responds over HTTPS; run
+             # this first when URLs don't load. Exits non-zero if anything fails.
 gw clean     # run teardown hooks for the current branch (e.g. drop its database)
 gw up        # foreground variant (blocks, Ctrl-C stops) — only when the user
              # explicitly wants to watch logs live
@@ -123,6 +136,15 @@ Templates: `{branch}` (raw), `{slug}` (DNS-safe, `feature-auth`),
 once per branch **before services start** (idempotent via marker file) — use
 it for bootstrap work like creating databases, running migrations, or
 minting an app's own certificates; `gw clean` runs teardown.
+
+**`cmd` execution model.** Each `cmd` runs as a single `sh -c "<cmd>"`, so
+shell features (`&&`, `|`, `$VAR`, redirection) work. `$PORT` is both
+string-substituted by gw and present in the environment. Because the whole
+string is already inside gw's own quotes, a `cmd` that itself needs nested
+quotes (setting env, sourcing a file, chaining steps) is fragile — put that
+logic in a script and point `cmd` at it: `cmd = "bash run.sh"`. gw watches
+each process and reports one that exits on boot as failed (`gw up -d` exits
+non-zero and names the service); a crashed service is dropped from `gw list`.
 
 ### Non-HTTP services: `proxy = "passthrough" | "none"`
 

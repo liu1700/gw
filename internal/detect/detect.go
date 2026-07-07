@@ -32,6 +32,9 @@ func Scan(root string) []Detected {
 	}
 	seen := map[string]bool{}
 	for _, d := range dirs {
+		if d != "." && isGitRoot(filepath.Join(root, d)) {
+			continue // nested worktree/submodule — not part of this checkout
+		}
 		for _, det := range scanDir(root, d) {
 			if !seen[det.Name] {
 				seen[det.Name] = true
@@ -40,6 +43,13 @@ func Scan(root string) []Detected {
 		}
 	}
 	return out
+}
+
+// isGitRoot reports whether dir contains a .git entry (a repo root, linked
+// worktree, or submodule). A linked worktree's .git is a file, not a dir.
+func isGitRoot(dir string) bool {
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return err == nil
 }
 
 func scanDir(root, dir string) []Detected {
@@ -163,6 +173,12 @@ func ScanHardcoded(root string) []Hardcoded {
 			n := d.Name()
 			if n == "node_modules" || n == ".git" || n == ".next" || n == "dist" ||
 				n == ".venv" || n == "__pycache__" {
+				return fs.SkipDir
+			}
+			// Skip nested git worktrees / submodules / clones: they carry their
+			// own .git and belong to another branch's tree, so their hardcoded
+			// URLs aren't this checkout's to fix (the source of `gw init` noise).
+			if path != root && isGitRoot(path) {
 				return fs.SkipDir
 			}
 			return nil

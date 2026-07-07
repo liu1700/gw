@@ -41,6 +41,18 @@ func Slugify(branch string) string {
 	return s
 }
 
+// WorktreeRoot returns the top-level directory of the git worktree that
+// contains dir. For a linked worktree nested inside the main repo this is the
+// linked worktree's own root — not the main repo's — because git resolves the
+// worktree from the nearest .git, so operations anchor to the right branch.
+func WorktreeRoot(dir string) (string, error) {
+	root, err := gitOut(dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", fmt.Errorf("not a git repository (or git missing): %w", err)
+	}
+	return root, nil
+}
+
 // Detect reads the current branch via git. dir may be "" for cwd.
 func Detect(dir string) (Info, error) {
 	branch, err := gitOut(dir, "branch", "--show-current")
